@@ -1,8 +1,11 @@
-# TODO — warning chunk >500kB (Phaser bundle)
+# TODO — warning chunk >500kB (Phaser bundle) — CERRADO (specs/bundle-chunk-500kb.md T1–T3)
 
-## Estado actual (T2, verificado)
-- `pnpm build` pasa; aviso: `dist/assets/index-*.js` ≈ 1.375 kB (gzip ≈ 358 kB) con Phaser 4.2.1.
-- Causa: se importa `phaser` completo en un solo bundle (`import Phaser from 'phaser'` en `src/main.js`).
+## Estado actual (cerrado 2026-10-01)
+- `pnpm build` pasa SIN warning: `chunkSizeWarningLimit: 1500` justificado en `vite.config.js`.
+- Medición por chunk (`pnpm build`): `phaser-*.js` ≈ 1.375 kB (gzip ≈ 357 kB) + `index-*.js` ≈ 12,9 kB (gzip ≈ 4,1 kB), con Phaser 4.2.1.
+- Estrategia elegida: vendor chunk `phaser` separado con caché larga vía `build.rolldownOptions.output.codeSplitting.groups` (en Vite 8 `manualChunks` de Rollup está deprecado). T2 (`import()` dinámico boot-primero) SALTADA: tras T1 el chunk inicial quedó en 12,9 kB < 500 kB y el flujo aprobado acepta el cierre con límite justificado; el split no ahorraría ni un byte de descarga inicial.
+- Import parcial `phaser/src`: descartado (frágil entre versiones).
+- Nota histórica: `specs/mvp-jugable.md` (Fuera de alcance) dejó esta optimización para después del MVP; se resolvió en `specs/bundle-chunk-500kb.md`.
 
 ## Consideraciones (a decidir en la spec del MVP, no aquí)
 1. **Medir antes de optimizar:** gzip 358 kB suele ser aceptable en banda ancha desktop; si el objetivo incluye móvil/redes lentas, sí partir el bundle.
@@ -12,8 +15,8 @@
 5. **Subir `build.chunkSizeWarningLimit`:** solo silencia el aviso, no reduce peso. Aceptable únicamente si se mide y el tiempo de carga es OK.
 6. **No hacer ahora:** el scaffold de T2 queda en un bundle; esta optimización pertenece a `specs/mvp-*.md`.
 
-## Verify (cuando se aborde)
-- `pnpm build` sin warning de chunk, o con límite justificado + medición de carga documentada.
+## Verify (cumplido 2026-10-01)
+- `pnpm build` sin warning con límite justificado (1500 kB) + medición documentada arriba. Check manual `pnpm preview` OK (2026-10-01): boot ok → jugar → game-over → reintento sin regresión.
 
 ---
 

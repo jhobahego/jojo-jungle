@@ -23,7 +23,7 @@ new Phaser.Game({
     default: 'arcade',
     arcade: {
       gravity: { y: 600 },
-      debug: true,
+      debug: false,
     },
   },
   scene: [BootScene, PreloadScene, PlayScene, GameOverScene, HUDScene],
