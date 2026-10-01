@@ -16,7 +16,7 @@
 6. **No hacer ahora:** el scaffold de T2 queda en un bundle; esta optimización pertenece a `specs/mvp-*.md`.
 
 ## Verify (cumplido 2026-10-01)
-- `pnpm build` sin warning con límite justificado (1500 kB) + medición documentada arriba. Pendiente manual: `pnpm preview` boot ok → jugar → game-over → reintento sin regresión.
+- `pnpm build` sin warning con límite justificado (1500 kB) + medición documentada arriba. Check manual `pnpm preview` OK (2026-10-01): boot ok → jugar → game-over → reintento sin regresión.
 
 ---
 
