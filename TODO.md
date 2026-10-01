@@ -20,16 +20,18 @@
 
 ---
 
-# Deuda de combate MVP (T4, verificado jugable)
+# Deuda de combate MVP — CERRADO (specs/deuda-combate-mvp.md T1–T4)
 
-## Estado actual
+## Estado actual (cerrado 2026-10-01)
 - Balas de John, grunt y torreta vuelan, hacen daño/matan y el flujo muerte → game-over → reintento funciona (verificado con screenshots).
-- Comportamiento provisorio aceptado para el MVP: sin restricción de visión ni de alcance, torreta con frame fijo.
+- Comportamiento provisorio superado: gate de visión + alcance, torreta orientada y orden de overlaps corregido (T1–T4 debajo).
 
-## Pendiente (post-MVP, no es alcance de T5)
-1. **Daño fuera de pantalla:** John, grunt y torreta pueden dispararse y dañarse sin verse (p. ej. matar al grunt desde el spawn, o recibir balas enemigas desde fuera de cámara). Dirección a decidir: activar patrulla/disparo solo si atacante y objetivo están en cámara (± margen), o rango de agro por distancia; ignorar overlaps fuera de vista.
-2. **Torreta sin animación / apunta a un solo lado:** `turret.png` es una tira de 8 frames de 18x18 (hoy se usa solo el frame 0, que mira a la izquierda) pero dispara al lado donde esté John. Dirección a decidir: elegir frame (o `flipX`) según el signo de `john.x - turret.x`; antes verificar qué orientación representa cada frame de la tira.
-3. **Alcance "infinito" de balas:** las balas solo mueren al salir del nivel (margen ±30px), lo que agrava el punto 1. Dirección a decidir: rango máximo por distancia recorrida o tiempo de vida (p. ej. desactivar tras ~300px o ~1s), coherente con el rango de agro del punto 1.
+## Resuelto (era pendiente post-MVP, no alcance de T5)
+1. **Daño fuera de pantalla:** cerrado en T2 — `gruntFire`/`turretFire` abortan si atacante o John están fuera de cámara (+48px) o a más de 200px (`AGRO_RANGE`); los 3 overlaps ignoran el daño fuera de cámara (+48px). Patrulla del grunt sigue activa fuera de cámara (decisión aprobada).
+2. **Torreta sin animación / apuntaba a un solo lado:** cerrado en T3 — verificada la tira `turret.png` (8 ángulos: 0 = izquierda … 4 = derecha) y se fija `setFrame(dx > 0 ? 4 : 0)` antes de disparar (frame, no `flipX`, para respetar el arte).
+3. **Alcance "infinito" de balas:** cerrado en T1 — `BULLET_RANGE = 200` por distancia recorrida (`spawnX`), coherente con el agro de 200; `refundAmmo` de John se mantiene al reciclar por rango.
+4. **Orden de params en overlaps (hallado al verificar T3, fix T4):** Arcade entrega (sprite, hijo-del-grupo), no el orden de registro; `onJohnBulletVsGrunt/Turret` resuelven bala/víctima por pertenencia al pool. Sin esto la torreta se deshabilitaba al primer roce (sin HP ni score) y el grunt fugaba su `fireTimer`.
 
-## Verify (cuando se aborde)
-- Manual `pnpm dev`: fuera de cámara no hay disparos ni daño en ningún sentido; la torreta mira al lado al que dispara; las balas desaparecen a medio camino del nivel.
+## Verify (cumplido 2026-10-01)
+- `pnpm build` limpio + headless Chrome/CDP (`t2-s*`, `t2c-*`, `t2b-s*`, `done-*` en `/tmp/opencode/`): quieto en el spawn, 12 disparos sin matar al grunt ni perder hp (`HP:3 SCORE:0 AMMO:12`); de cerca hay disparos y daño en ambos sentidos (`HP:3→2→1`, luego `SCORE:10` al matar al grunt).
+- Manual `pnpm dev` (usuario, 2026-10-01): rango 200 confirmado tras bajarlo de 320; torreta mira al lado al que dispara OK; post-fix: grunt 1 tiro (+10), torreta 2 tiros (+10), `SCORE:20` y `AMMO:12` finales.
