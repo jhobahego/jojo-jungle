@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { createJohn, updateJohn } from '../player.js';
+import { JOHN_HIT_HOLD, JOHN_SHOOT_HOLD, createJohn, updateJohn } from '../player.js';
 import {
   BULLET_RANGE,
   GRUNT_FIRE_DELAY,
@@ -55,6 +55,41 @@ export default class PlayScene extends Phaser.Scene {
     this.load.spritesheet('john-crouch-anim', 'assets/player/john_crouch.png', {
       frameWidth: 26,
       frameHeight: 26,
+    });
+    this.load.spritesheet(
+      'john-stand-shoot-anim',
+      'assets/player/john_stand_shooting.png',
+      {
+        frameWidth: 26,
+        frameHeight: 22,
+      },
+    );
+    this.load.spritesheet('john-run-shoot-anim', 'assets/player/john_run_shoot.png', {
+      frameWidth: 26,
+      frameHeight: 22,
+    });
+    this.load.spritesheet(
+      'john-crouch-shoot-anim',
+      'assets/player/john_crouch_shoot.png',
+      {
+        frameWidth: 26,
+        frameHeight: 26,
+      },
+    );
+    this.load.spritesheet('john-land-anim', 'assets/player/john_landing.png', {
+      frameWidth: 26,
+      frameHeight: 22,
+    });
+    this.load.spritesheet('john-hit-anim', 'assets/player/john_hithurt.png', {
+      frameWidth: 26,
+      frameHeight: 22,
+    });
+    // T3 animaciones-john: 'john-dead' usa john_defeated.png (10f 26x22) como
+    // anim principal; john_dead.png (2f) queda copiado en public/ solo como
+    // corpse final si la inspección visual lo pide (no se carga aquí).
+    this.load.spritesheet('john-dead-anim', 'assets/player/john_defeated.png', {
+      frameWidth: 26,
+      frameHeight: 22,
     });
     // T4: balas y enemigos (reusan PNG ya copiados con keys propias).
     this.load.spritesheet('john-bullet', 'assets/player/weapon_bullet.png', {
@@ -197,7 +232,7 @@ export default class PlayScene extends Phaser.Scene {
   }
 
   update() {
-    updateJohn(this.john, { cursors: this.cursors, keys: this.keys });
+    updateJohn(this.john, { cursors: this.cursors, keys: this.keys, now: this.time.now });
     if (Phaser.Input.Keyboard.JustDown(this.fireKey)) {
       this.fireJohn();
     }
@@ -206,7 +241,8 @@ export default class PlayScene extends Phaser.Scene {
     this.recycleBullets(this.bullets);
     this.recycleBullets(this.enemyBullets);
     // Caída al vacío = daño + respawn (o game over si no quedan vidas).
-    if (this.john.active && this.john.y > this.levelHeight + 60) {
+    // T3: durante muerte no hay doble daño (respawn por foso sigue directo).
+    if (this.john.active && !this.john.getData('dead') && this.john.y > this.levelHeight + 60) {
       this.damageJohn(null, true);
     }
     const scrollX = this.cameras.main.scrollX;
@@ -216,7 +252,8 @@ export default class PlayScene extends Phaser.Scene {
 
   // T4: disparo de John (pool, una bala por pulsación).
   fireJohn() {
-    if (!this.john.active) {
+    // T3 animaciones-john: muerto ignora input (no dispara ni re-anima).
+    if (!this.john.active || this.john.getData('dead')) {
       return;
     }
     const dir = this.john.flipX ? -1 : 1;
@@ -230,6 +267,17 @@ export default class PlayScene extends Phaser.Scene {
     bullet.setData('spawnX', x);
     bullet.setVelocityX(dir * 340);
     bullet.body.setAllowGravity(false);
+    // T1 animaciones-john: feedback visual de disparo (no toca bala/spawn/ammo).
+    // El hold evita que updateJohn lo pise con idle/run al frame siguiente.
+    // T2: agachado usa 'john-crouch-shoot' sin levantarse ni cambiar hitbox.
+    this.john.setData('shootUntil', this.time.now + JOHN_SHOOT_HOLD);
+    if (this.john.getData('crouching')) {
+      this.john.play('john-crouch-shoot', true);
+    } else if (this.john.body.velocity.x !== 0) {
+      this.john.play('john-run-shoot', true);
+    } else {
+      this.john.play('john-stand-shoot', true);
+    }
     // T5: gastar ammo (el HUD escucha changedata-ammo).
     this.registry.set('ammo', this.registry.get('ammo') - 1);
   }
@@ -286,7 +334,7 @@ export default class PlayScene extends Phaser.Scene {
   }
 
   onEnemyBulletVsJohn(john, bullet) {
-    if (!bullet.active || !john.active) {
+    if (!bullet.active || !john.active || john.getData('dead')) {
       return;
     }
     // T2 (deuda combate): sin daño fuera de cámara; la bala se descarta sin hitJohn.
@@ -301,25 +349,51 @@ export default class PlayScene extends Phaser.Scene {
 
   // T4: John recibe un golpe (toque enemigo o bala): daño + knockback breve.
   hitJohn(sourceX) {
-    if (!this.john.active || this.john.getData('invuln')) {
+    // T3: sin doble daño durante muerte (guards active/dead/invuln vigentes).
+    if (!this.john.active || this.john.getData('dead') || this.john.getData('invuln')) {
       return;
     }
     this.damageJohn(sourceX, false);
   }
 
   damageJohn(sourceX, respawn) {
+    // T3: sin doble daño durante muerte; la rama mortal no crea timers.
+    if (!this.john.active || this.john.getData('dead')) {
+      return;
+    }
     const hp = this.registry.get('hp') - 1;
     this.registry.set('hp', hp);
     if (hp <= 0) {
-      this.scene.start('GameOver');
+      // T3 animaciones-john: muerte animada (hitbox BODY_STAND vigente).
+      // Igual que damageGrunt: body off inmediato + once(animationcomplete).
+      this.john.setData('dead', true);
+      this.tweens.killTweensOf(this.john);
+      this.john.setAlpha(1);
+      if (this.john.body) {
+        this.john.body.enable = false;
+        this.john.setVelocity(0, 0);
+      }
+      this.john.play('john-dead');
+      this.john.once('animationcomplete-john-dead', () => {
+        this.scene.start('GameOver');
+      });
       return;
     }
     if (respawn) {
+      // Caída al vacío con vidas: respawn directo sin anim de muerte, igual que hoy.
+      // Se limpian los holds para no estampar poses viejas tras el teleport.
+      this.john.setData('shootUntil', 0);
+      this.john.setData('landUntil', 0);
+      this.john.setData('hitUntil', 0);
       this.john.setPosition(this.spawn.x, this.spawn.y);
       this.john.setVelocity(0, 0);
     } else if (sourceX !== null) {
       const dir = this.john.x >= sourceX ? 1 : -1;
       this.john.setVelocity(dir * 220, -180);
+      // T3 animaciones-john: feedback visual de golpe (el tween alpha sigue igual).
+      // El hold evita que updateJohn lo pise con idle/run/jump al frame siguiente.
+      this.john.setData('hitUntil', this.time.now + JOHN_HIT_HOLD);
+      this.john.play('john-hit', true);
     }
     // Invulnerabilidad breve con parpadeo para no encadenar golpes.
     this.john.setData('invuln', true);
