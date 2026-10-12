@@ -7,6 +7,7 @@ import {
   createGrunt,
   updateGrunt,
   createTurret,
+  updateTurret,
   gruntFire,
   turretFire,
   damageGrunt,
@@ -68,7 +69,23 @@ export default class PlayScene extends Phaser.Scene {
       frameWidth: 26,
       frameHeight: 22,
     });
+    this.load.spritesheet('grunt-run-anim', 'assets/enemy/grunt_run.png', {
+      frameWidth: 26,
+      frameHeight: 22,
+    });
+    this.load.spritesheet('grunt-shoot-anim', 'assets/enemy/grunt_shoot.png', {
+      frameWidth: 26,
+      frameHeight: 22,
+    });
+    this.load.spritesheet('grunt-death-anim', 'assets/enemy/grunt_death.png', {
+      frameWidth: 26,
+      frameHeight: 22,
+    });
     this.load.spritesheet('turret-anim', 'assets/enemy/turret.png', {
+      frameWidth: 18,
+      frameHeight: 18,
+    });
+    this.load.spritesheet('turret-broke-anim', 'assets/enemy/turret_broke.png', {
       frameWidth: 18,
       frameHeight: 18,
     });
@@ -123,12 +140,18 @@ export default class PlayScene extends Phaser.Scene {
     this.physics.add.overlap(this.enemyBullets, this.john, (john, bullet) =>
       this.onEnemyBulletVsJohn(john, bullet),
     );
-    this.physics.add.overlap(this.john, this.grunt, (john, grunt) =>
-      this.hitJohn(grunt.x),
-    );
-    this.physics.add.overlap(this.john, this.turret, (john, turret) =>
-      this.hitJohn(turret.x),
-    );
+    this.physics.add.overlap(this.john, this.grunt, (john, grunt) => {
+      if (grunt.getData('dead')) {
+        return;
+      }
+      this.hitJohn(grunt.x);
+    });
+    this.physics.add.overlap(this.john, this.turret, (john, turret) => {
+      if (turret.getData('dead')) {
+        return;
+      }
+      this.hitJohn(turret.x);
+    });
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,SPACE,Z,X');
@@ -179,6 +202,7 @@ export default class PlayScene extends Phaser.Scene {
       this.fireJohn();
     }
     updateGrunt(this.grunt);
+    updateTurret(this.turret, this.john);
     this.recycleBullets(this.bullets);
     this.recycleBullets(this.enemyBullets);
     // Caída al vacío = daño + respawn (o game over si no quedan vidas).
@@ -231,7 +255,7 @@ export default class PlayScene extends Phaser.Scene {
 
   onJohnBulletVsGrunt(a, b) {
     const { bullet, victim: grunt } = this.resolveJohnBullet(a, b);
-    if (!bullet.active) {
+    if (!bullet.active || grunt.getData('dead')) {
       return;
     }
     // T2 (deuda combate): sin daño fuera de cámara; la bala se recicla con refund.
@@ -247,7 +271,7 @@ export default class PlayScene extends Phaser.Scene {
 
   onJohnBulletVsTurret(a, b) {
     const { bullet, victim: turret } = this.resolveJohnBullet(a, b);
-    if (!bullet.active) {
+    if (!bullet.active || turret.getData('dead')) {
       return;
     }
     // T2 (deuda combate): sin daño fuera de cámara; la bala se recicla con refund.
@@ -321,8 +345,12 @@ export default class PlayScene extends Phaser.Scene {
         continue;
       }
       const spawnX = bullet.getData('spawnX');
+      const spawnY = bullet.getData('spawnY');
       const outOfRange =
-        typeof spawnX === 'number' && Math.abs(bullet.x - spawnX) > BULLET_RANGE;
+        typeof spawnX === 'number' &&
+        (typeof spawnY === 'number'
+          ? Math.hypot(bullet.x - spawnX, bullet.y - spawnY) > BULLET_RANGE
+          : Math.abs(bullet.x - spawnX) > BULLET_RANGE);
       if (
         outOfRange ||
         bullet.x < -30 ||
