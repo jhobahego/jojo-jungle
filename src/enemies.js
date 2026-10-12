@@ -19,8 +19,45 @@ export function isOnCameraPlusMargin(scene, x, margin = CAM_MARGIN) {
   return x >= view.x - margin && x <= view.right + margin;
 }
 
+export function ensureEnemyAnims(scene) {
+  const anims = scene.anims;
+  if (!anims.exists('grunt-run')) {
+    anims.create({
+      key: 'grunt-run',
+      frames: anims.generateFrameNumbers('grunt-run-anim', { start: 0, end: 9 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+  }
+  if (!anims.exists('grunt-shoot')) {
+    anims.create({
+      key: 'grunt-shoot',
+      frames: anims.generateFrameNumbers('grunt-shoot-anim', { start: 0, end: 1 }),
+      frameRate: 8,
+      repeat: 0,
+    });
+  }
+  if (!anims.exists('grunt-death')) {
+    anims.create({
+      key: 'grunt-death',
+      frames: anims.generateFrameNumbers('grunt-death-anim', { start: 0, end: 11 }),
+      frameRate: 12,
+      repeat: 0,
+    });
+  }
+  if (!anims.exists('turret-broke')) {
+    anims.create({
+      key: 'turret-broke',
+      frames: anims.generateFrameNumbers('turret-broke-anim', { start: 0, end: 3 }),
+      frameRate: 10,
+      repeat: 0,
+    });
+  }
+}
+
 export function createGrunt(scene, x, y) {
-  const grunt = scene.physics.add.sprite(x, y, 'grunt-anim', 0);
+  ensureEnemyAnims(scene);
+  const grunt = scene.physics.add.sprite(x, y, 'grunt-run-anim', 0);
   grunt.setCollideWorldBounds(true);
   grunt.body.setSize(20, 20);
   grunt.setData({
@@ -30,13 +67,18 @@ export function createGrunt(scene, x, y) {
     maxX: GRUNT_PATROL.maxX,
     fireTimer: null,
     dead: false,
+    shooting: false,
   });
   grunt.setVelocityX(GRUNT_SPEED);
+  grunt.play('grunt-run');
   return grunt;
 }
 
 export function updateGrunt(grunt) {
   if (!grunt.active || grunt.getData('dead')) {
+    return;
+  }
+  if (grunt.getData('shooting')) {
     return;
   }
   let dir = grunt.getData('dir');
@@ -48,27 +90,55 @@ export function updateGrunt(grunt) {
   grunt.setData('dir', dir);
   grunt.setVelocityX(dir * GRUNT_SPEED);
   grunt.setFlipX(dir < 0);
+  grunt.play('grunt-run', true);
 }
 
+export const TURRET_FRAME_VECTORS = {
+  0: { x: -1, y: 0 },
+  1: { x: -Math.SQRT1_2, y: -Math.SQRT1_2 },
+  2: { x: 0, y: -1 },
+  3: { x: Math.SQRT1_2, y: -Math.SQRT1_2 },
+  4: { x: 1, y: 0 },
+  5: { x: Math.SQRT1_2, y: Math.SQRT1_2 },
+  6: { x: 0, y: 1 },
+  7: { x: -Math.SQRT1_2, y: Math.SQRT1_2 },
+};
+
+const SECTOR_TO_TURRET_FRAME = [4, 5, 6, 7, 0, 1, 2, 3];
+
 export function createTurret(scene, x, y) {
-  const turret = scene.physics.add.staticImage(x, y, 'turret-anim', 0);
-  turret.setData({ hp: 2, fireTimer: null, dead: false });
+  ensureEnemyAnims(scene);
+  const turret = scene.physics.add.staticSprite(x, y, 'turret-anim', 0);
+  turret.setData({ hp: 2, fireTimer: null, dead: false, aimFrame: 0 });
   return turret;
 }
 
-export function fireEnemyBullet(scene, group, x, y, dirX, speed) {
+export function updateTurret(turret, john) {
+  if (!turret.active || turret.getData('dead') || !john || !john.active) {
+    return;
+  }
+  const angle = Phaser.Math.Angle.Between(turret.x, turret.y, john.x, john.y);
+  const deg = (Phaser.Math.RadToDeg(angle) + 360) % 360;
+  const sector = Math.round(deg / 45) % 8;
+  const frame = SECTOR_TO_TURRET_FRAME[sector];
+  turret.setFrame(frame);
+  turret.setData('aimFrame', frame);
+}
+
+export function fireEnemyBullet(scene, group, x, y, dirX, dirY = 0, speed = ENEMY_BULLET_SPEED) {
   const bullet = group.get(x, y, 'enemy-bullet', 0);
   if (!bullet) {
     return;
   }
   bullet.enableBody(true, x, y, true, true);
   bullet.setData('spawnX', x);
-  bullet.setVelocity(dirX * speed, 0);
+  bullet.setData('spawnY', y);
+  bullet.setVelocity(dirX * speed, dirY * speed);
   bullet.body.setAllowGravity(false);
 }
 
 export function gruntFire(scene, group, grunt, john) {
-  if (!grunt.active || grunt.getData('dead')) {
+  if (!grunt.active || grunt.getData('dead') || grunt.getData('shooting')) {
     return;
   }
   if (!john || !john.active) {
@@ -81,7 +151,19 @@ export function gruntFire(scene, group, grunt, john) {
     return;
   }
   const dir = grunt.getData('dir');
-  fireEnemyBullet(scene, group, grunt.x + dir * 12, grunt.y, dir, ENEMY_BULLET_SPEED);
+  grunt.setData('shooting', true);
+  grunt.setVelocityX(0);
+  grunt.play('grunt-shoot');
+  fireEnemyBullet(scene, group, grunt.x + dir * 12, grunt.y, dir, 0, ENEMY_BULLET_SPEED);
+  grunt.once('animationcomplete-grunt-shoot', () => {
+    if (!grunt.active || grunt.getData('dead')) {
+      return;
+    }
+    grunt.setData('shooting', false);
+    const currentDir = grunt.getData('dir');
+    grunt.setVelocityX(currentDir * GRUNT_SPEED);
+    grunt.play('grunt-run', true);
+  });
 }
 
 export function turretFire(scene, group, turret, john) {
@@ -94,16 +176,18 @@ export function turretFire(scene, group, turret, john) {
   if (Math.abs(john.x - turret.x) > AGRO_RANGE) {
     return;
   }
-  const dx = john.x - turret.x;
-  // T3 (deuda combate): la tira trae 8 ángulos de cañón (verificado en
-  // SpriteSheets/enemy/turret.png: 0 = izquierda, 1 = arriba-izq, 2 = arriba,
-  // 3 = arriba-der, 4 = derecha, 5 = abajo-der, 6 = abajo, 7 = abajo-izq).
-  // El juego dispara en horizontal, así que se elige frame por el signo de
-  // dx (setFrame en vez de flipX para respetar el arte original); frame 0
-  // (izquierda) por defecto cuando dx <= 0.
-  turret.setFrame(dx > 0 ? 4 : 0);
-  const dir = dx === 0 ? 1 : Math.sign(dx);
-  fireEnemyBullet(scene, group, turret.x + dir * 12, turret.y, dir, ENEMY_BULLET_SPEED - 10);
+  const frame = turret.getData('aimFrame') ?? 0;
+  const vec = TURRET_FRAME_VECTORS[frame] || { x: -1, y: 0 };
+  const speed = ENEMY_BULLET_SPEED - 10;
+  fireEnemyBullet(
+    scene,
+    group,
+    turret.x + vec.x * 12,
+    turret.y + vec.y * 12,
+    vec.x,
+    vec.y,
+    speed,
+  );
 }
 
 // Devuelve true si el enemigo murió con este impacto.
@@ -112,12 +196,22 @@ export function damageGrunt(scene, grunt) {
     return false;
   }
   grunt.setData('dead', true);
+  grunt.setData('shooting', false);
   const timer = grunt.getData('fireTimer');
   if (timer) {
     timer.remove();
   }
-  grunt.destroy();
+  if (grunt.body) {
+    grunt.body.enable = false;
+    grunt.setVelocity(0, 0);
+  }
   scene.registry.set('score', scene.registry.get('score') + 10);
+  grunt.play('grunt-death');
+  grunt.once('animationcomplete-grunt-death', () => {
+    if (grunt.active) {
+      grunt.destroy();
+    }
+  });
   return true;
 }
 
@@ -133,13 +227,21 @@ export function damageTurret(scene, turret) {
     if (timer) {
       timer.remove();
     }
-    turret.destroy();
+    if (turret.body) {
+      turret.body.enable = false;
+    }
     scene.registry.set('score', scene.registry.get('score') + 10);
+    turret.play('turret-broke');
+    turret.once('animationcomplete-turret-broke', () => {
+      if (turret.active) {
+        turret.destroy();
+      }
+    });
     return true;
   }
   turret.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
   scene.time.delayedCall(120, () => {
-    if (turret.active) {
+    if (turret.active && !turret.getData('dead')) {
       turret.clearTint();
     }
   });
