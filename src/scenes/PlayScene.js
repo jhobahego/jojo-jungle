@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { createJohn, updateJohn } from '../player.js';
 import {
+  BULLET_RANGE,
   GRUNT_FIRE_DELAY,
   TURRET_FIRE_DELAY,
   createGrunt,
@@ -10,6 +11,7 @@ import {
   turretFire,
   damageGrunt,
   damageTurret,
+  isOnCameraPlusMargin,
 } from '../enemies.js';
 
 // T3: nivel jungla — suelo/plataformas estáticas (rectángulos temporales),
@@ -140,7 +142,7 @@ export default class PlayScene extends Phaser.Scene {
       this.time.addEvent({
         delay: GRUNT_FIRE_DELAY,
         loop: true,
-        callback: () => gruntFire(this, this.enemyBullets, this.grunt),
+        callback: () => gruntFire(this, this.enemyBullets, this.grunt, this.john),
       }),
     );
     this.turret.setData(
@@ -201,6 +203,7 @@ export default class PlayScene extends Phaser.Scene {
       return;
     }
     bullet.enableBody(true, x, y, true, true);
+    bullet.setData('spawnX', x);
     bullet.setVelocityX(dir * 340);
     bullet.body.setAllowGravity(false);
     // T5: gastar ammo (el HUD escucha changedata-ammo).
@@ -216,8 +219,25 @@ export default class PlayScene extends Phaser.Scene {
     this.registry.set('ammo', this.registry.get('ammo') + 1);
   }
 
-  onJohnBulletVsGrunt(bullet, grunt) {
+  // Los callbacks de overlap de Arcade reciben (sprite, hijo-del-grupo),
+  // no en el orden de registro (probado con trazas): se resuelve cada rol
+  // por pertenencia al pool en vez de asumir posiciones.
+  resolveJohnBullet(a, b) {
+    if (this.bullets.contains(a)) {
+      return { bullet: a, victim: b };
+    }
+    return { bullet: b, victim: a };
+  }
+
+  onJohnBulletVsGrunt(a, b) {
+    const { bullet, victim: grunt } = this.resolveJohnBullet(a, b);
     if (!bullet.active) {
+      return;
+    }
+    // T2 (deuda combate): sin daño fuera de cámara; la bala se recicla con refund.
+    if (!isOnCameraPlusMargin(this, bullet.x) || !isOnCameraPlusMargin(this, grunt.x)) {
+      this.killBullet(bullet);
+      this.refundAmmo();
       return;
     }
     this.killBullet(bullet);
@@ -225,8 +245,15 @@ export default class PlayScene extends Phaser.Scene {
     damageGrunt(this, grunt);
   }
 
-  onJohnBulletVsTurret(bullet, turret) {
+  onJohnBulletVsTurret(a, b) {
+    const { bullet, victim: turret } = this.resolveJohnBullet(a, b);
     if (!bullet.active) {
+      return;
+    }
+    // T2 (deuda combate): sin daño fuera de cámara; la bala se recicla con refund.
+    if (!isOnCameraPlusMargin(this, bullet.x) || !isOnCameraPlusMargin(this, turret.x)) {
+      this.killBullet(bullet);
+      this.refundAmmo();
       return;
     }
     this.killBullet(bullet);
@@ -236,6 +263,11 @@ export default class PlayScene extends Phaser.Scene {
 
   onEnemyBulletVsJohn(john, bullet) {
     if (!bullet.active || !john.active) {
+      return;
+    }
+    // T2 (deuda combate): sin daño fuera de cámara; la bala se descarta sin hitJohn.
+    if (!isOnCameraPlusMargin(this, bullet.x) || !isOnCameraPlusMargin(this, john.x)) {
+      this.killBullet(bullet);
       return;
     }
     const sourceX = bullet.x;
@@ -285,12 +317,18 @@ export default class PlayScene extends Phaser.Scene {
 
   recycleBullets(group) {
     for (const bullet of group.getChildren()) {
+      if (!bullet.active) {
+        continue;
+      }
+      const spawnX = bullet.getData('spawnX');
+      const outOfRange =
+        typeof spawnX === 'number' && Math.abs(bullet.x - spawnX) > BULLET_RANGE;
       if (
-        bullet.active &&
-        (bullet.x < -30 ||
-          bullet.x > this.levelWidth + 30 ||
-          bullet.y < -30 ||
-          bullet.y > this.levelHeight + 90)
+        outOfRange ||
+        bullet.x < -30 ||
+        bullet.x > this.levelWidth + 30 ||
+        bullet.y < -30 ||
+        bullet.y > this.levelHeight + 90
       ) {
         this.killBullet(bullet);
         // T5: solo las balas de John devuelven ammo.
