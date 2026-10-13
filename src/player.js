@@ -123,6 +123,8 @@ export function updateJohn(player, input) {
     return;
   }
   const { cursors, keys, now } = input;
+  // T2 controles-movimiento: reserva de apuntado arriba, sin efecto visible.
+  player.setData('aimUp', cursors.up.isDown || keys.W.isDown);
   const body = player.body;
   const realGround = body.blocked.down;
   const t = now ?? 0;
@@ -134,9 +136,9 @@ export function updateJohn(player, input) {
   // Prioridad: hit > shoot > land > idle/run.
   const hitting = t < (player.getData('hitUntil') ?? 0);
 
-  // Agachado por hold (cursores/S/X): el toggle se descartó — el hold nunca
+  // Agachado por hold (S/↓): el toggle se descartó — el hold nunca
   // estuvo roto (el ciclo era el frame 0 de pie dentro del loop de crouch).
-  const crouchHeld = cursors.down.isDown || keys.S.isDown || keys.X.isDown;
+  const crouchHeld = cursors.down.isDown || keys.S.isDown;
   const leftHeld = cursors.left.isDown || keys.A.isDown;
   const rightHeld = cursors.right.isDown || keys.D.isDown;
 
@@ -161,10 +163,8 @@ export function updateJohn(player, input) {
   const landing = t < (player.getData('landUntil') ?? 0);
 
   const jumpPressed =
-    Phaser.Input.Keyboard.JustDown(cursors.up) ||
-    Phaser.Input.Keyboard.JustDown(keys.W) ||
-    Phaser.Input.Keyboard.JustDown(keys.SPACE) ||
-    Phaser.Input.Keyboard.JustDown(keys.Z);
+    Phaser.Input.Keyboard.JustDown(keys.X) ||
+    Phaser.Input.Keyboard.JustDown(keys.SPACE);
 
   // Agachado: quieto en el sitio, hitbox baja.
   if (onGround && crouchHeld) {
