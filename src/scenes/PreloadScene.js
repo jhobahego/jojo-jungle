@@ -25,6 +25,22 @@ const MVP_ASSETS = [
   ['life-unit', 'assets/ui/life_unit.png'],
 ];
 
+// T1 (specs/sonidos.md): 11 .ogg acá + snd_click precargado en Boot
+// (suena en Boot, antes de que Preload exista; no duplicar la carga).
+const SOUND_ASSETS = [
+  ['snd_jump', 'assets/sounds/snd_jump.ogg'],
+  ['snd_landing', 'assets/sounds/snd_landing.ogg'],
+  ['snd_step1', 'assets/sounds/snd_step1.ogg'],
+  ['snd_step2', 'assets/sounds/snd_step2.ogg'],
+  ['snd_rifle_shot', 'assets/sounds/snd_rifle_shot.ogg'],
+  ['snd_reload_clip', 'assets/sounds/snd_reload_clip.ogg'],
+  ['snd_hurt', 'assets/sounds/snd_hurt.ogg'],
+  ['snd_explosion_ground', 'assets/sounds/snd_explosion_ground.ogg'],
+  ['snd_main_theme', 'assets/sounds/snd_main_theme.ogg'],
+  ['snd_end_drums', 'assets/sounds/snd_end_drums.ogg'],
+  ['snd_select', 'assets/sounds/snd_select.ogg'],
+];
+
 export default class PreloadScene extends Phaser.Scene {
   constructor() {
     super('Preload');
@@ -66,6 +82,10 @@ export default class PreloadScene extends Phaser.Scene {
 
     for (const [key, url] of MVP_ASSETS) {
       this.load.image(key, url);
+    }
+
+    for (const [key, url] of SOUND_ASSETS) {
+      this.load.audio(key, url);
     }
   }
 

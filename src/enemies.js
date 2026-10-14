@@ -155,6 +155,8 @@ export function gruntFire(scene, group, grunt, john) {
   grunt.setVelocityX(0);
   grunt.play('grunt-shoot');
   fireEnemyBullet(scene, group, grunt.x + dir * 12, grunt.y, dir, 0, ENEMY_BULLET_SPEED);
+  // T4 sonidos: disparo grunt con el mismo rifle que John (volumen SFX 0.8).
+  scene.sound.play('snd_rifle_shot', { volume: 0.8 });
   grunt.once('animationcomplete-grunt-shoot', () => {
     if (!grunt.active || grunt.getData('dead')) {
       return;
@@ -188,6 +190,8 @@ export function turretFire(scene, group, turret, john) {
     vec.y,
     speed,
   );
+  // T4 sonidos: disparo torreta con el mismo rifle que John (volumen SFX 0.8).
+  scene.sound.play('snd_rifle_shot', { volume: 0.8 });
 }
 
 // Devuelve true si el enemigo murió con este impacto.
@@ -207,6 +211,8 @@ export function damageGrunt(scene, grunt) {
   }
   scene.registry.set('score', scene.registry.get('score') + 10);
   grunt.play('grunt-death');
+  // T4 sonidos: muerte de grunt (volumen SFX 0.8).
+  scene.sound.play('snd_explosion_ground', { volume: 0.8 });
   grunt.once('animationcomplete-grunt-death', () => {
     if (grunt.active) {
       grunt.destroy();
@@ -232,6 +238,8 @@ export function damageTurret(scene, turret) {
     }
     scene.registry.set('score', scene.registry.get('score') + 10);
     turret.play('turret-broke');
+    // T4 sonidos: muerte de torreta (volumen SFX 0.8; el golpe no mortal sigue mudo).
+    scene.sound.play('snd_explosion_ground', { volume: 0.8 });
     turret.once('animationcomplete-turret-broke', () => {
       if (turret.active) {
         turret.destroy();
