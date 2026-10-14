@@ -159,6 +159,8 @@ export function updateJohn(player, input) {
   if (justLanded) {
     // 3f a 10fps ≈ 300ms: la pose sobrevive a idle/run como el hold de disparo.
     player.setData('landUntil', t + 300);
+    // T3 sonidos: aterrizaje en el flanco aire→suelo (volumen SFX 0.8).
+    player.scene.sound.play('snd_landing', { volume: 0.8 });
   }
   const landing = t < (player.getData('landUntil') ?? 0);
 
@@ -202,6 +204,8 @@ export function updateJohn(player, input) {
   if (jumpPressed && onGround) {
     body.setVelocityY(-JOHN_JUMP);
     player.play('john-jump', true);
+    // T3 sonidos: salto (volumen SFX 0.8).
+    player.scene.sound.play('snd_jump', { volume: 0.8 });
   } else if (onGround) {
     if (hitting) {
       player.play('john-hit', true);
@@ -213,6 +217,17 @@ export function updateJohn(player, input) {
       player.play('john-run', true);
     } else {
       player.play('john-idle', true);
+    }
+    // T3 sonidos: pasos alternados con cadencia ≥250ms solo corriendo en suelo
+    // (gate de cadencia, no por frame; estado físico, no la anim en curso).
+    if (leftHeld !== rightHeld) {
+      const lastStep = player.getData('lastStepAt') ?? -1000;
+      if (t - lastStep >= 250) {
+        const next = player.getData('stepAlt') === 1 ? 2 : 1;
+        player.setData('stepAlt', next);
+        player.setData('lastStepAt', t);
+        player.scene.sound.play(`snd_step${next}`, { volume: 0.8 });
+      }
     }
   } else if (hitting) {
     player.play('john-hit', true);

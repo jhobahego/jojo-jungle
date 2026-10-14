@@ -16,6 +16,8 @@ export default class GameOverScene extends Phaser.Scene {
   }
 
   create() {
+    // T2 sonidos: tambores una vez al entrar.
+    this.sound.play('snd_end_drums');
     if (this.textures.exists('gameover')) {
       this.add.image(240, 120, 'gameover', 0);
     } else {
@@ -30,7 +32,10 @@ export default class GameOverScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const retry = () => this.scene.start('Play');
+    const retry = () => {
+      this.sound.play('snd_select');
+      this.scene.start('Play');
+    };
     this.input.keyboard.once('keydown', retry);
     this.input.once('pointerdown', retry);
   }

@@ -14,6 +14,9 @@ export default class BootScene extends Phaser.Scene {
       frameWidth: 201,
       frameHeight: 23,
     });
+    // Clic del press-start: se precarga acá (no en Preload) porque suena
+    // en esta misma escena, antes de que Preload cargue el resto.
+    this.load.audio('snd_click', 'assets/sounds/snd_click.ogg');
   }
 
   create() {
@@ -33,7 +36,10 @@ export default class BootScene extends Phaser.Scene {
         .setOrigin(0.5);
     }
 
-    const start = () => this.scene.start('Preload');
+    const start = () => {
+      this.sound.play('snd_click');
+      this.scene.start('Preload');
+    };
     this.input.keyboard.once('keydown', start);
     this.input.once('pointerdown', start);
   }

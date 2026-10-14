@@ -222,6 +222,11 @@ export default class PlayScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scene.stop('HUD');
     });
+
+    // T2 sonidos: tema en loop una sola vez por run (guard anti-duplicado).
+    if (!this.sound.isPlaying('snd_main_theme')) {
+      this.sound.play('snd_main_theme', { loop: true, volume: 0.5 });
+    }
   }
 
   addPlatform(x, y, w, h, color) {
@@ -261,12 +266,16 @@ export default class PlayScene extends Phaser.Scene {
     const y = this.john.y - 2;
     const bullet = this.bullets.get(x, y, 'john-bullet', 0);
     if (!bullet) {
+      // T3 sonidos: pool vacío → feedback de recarga (volumen SFX 0.8).
+      this.sound.play('snd_reload_clip', { volume: 0.8 });
       return;
     }
     bullet.enableBody(true, x, y, true, true);
     bullet.setData('spawnX', x);
     bullet.setVelocityX(dir * 340);
     bullet.body.setAllowGravity(false);
+    // T3 sonidos: disparo de John (volumen SFX 0.8).
+    this.sound.play('snd_rifle_shot', { volume: 0.8 });
     // T1 animaciones-john: feedback visual de disparo (no toca bala/spawn/ammo).
     // El hold evita que updateJohn lo pise con idle/run al frame siguiente.
     // T2: agachado usa 'john-crouch-shoot' sin levantarse ni cambiar hitbox.
@@ -363,7 +372,11 @@ export default class PlayScene extends Phaser.Scene {
     }
     const hp = this.registry.get('hp') - 1;
     this.registry.set('hp', hp);
+    // T3 sonidos: daño a John (volumen SFX 0.8; cubre hitJohn y caída al vacío).
+    this.sound.play('snd_hurt', { volume: 0.8 });
     if (hp <= 0) {
+      // T2 sonidos: cortar el tema al morir (GameOver pone los tambores).
+      this.sound.stopByKey('snd_main_theme');
       // T3 animaciones-john: muerte animada (hitbox BODY_STAND vigente).
       // Igual que damageGrunt: body off inmediato + once(animationcomplete).
       this.john.setData('dead', true);
