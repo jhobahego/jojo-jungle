@@ -16,7 +16,8 @@ export const RELOAD_DELAY = 900;
 export const JOHN_HIT_HOLD = 250;
 
 // Hitboxes en coords de frame: de pie frame 26x22, agachado frame 26x26.
-const BODY_STAND = { w: 18, h: 20, ox: 4, oy: 2 };
+// T4 game-feel: BODY_STAND exportado para anclar el dust a los pies.
+export const BODY_STAND = { w: 18, h: 20, ox: 4, oy: 2 };
 const BODY_CROUCH = { w: 18, h: 14, ox: 4, oy: 12 };
 
 function ensureAnims(scene) {
@@ -165,6 +166,14 @@ export function updateJohn(player, input) {
     player.setData('landUntil', t + 300);
     // T3 sonidos: aterrizaje en el flanco aire→suelo (volumen SFX 0.8).
     player.scene.sound.play('snd_landing', { volume: 0.8 });
+    // T4 game-feel: jump dust en el flanco real aire→suelo (una instancia por
+    // flanco), apoyado en los pies (body.bottom, que deriva de BODY_STAND) y
+    // espejado según el facing. Si falta la anim se omite.
+    if (typeof player.scene.spawnDust === 'function') {
+      const feetY = player.body?.bottom ?? player.y + BODY_STAND.h / 2;
+      const behindX = player.x + (player.flipX ? 1 : -1);
+      player.scene.spawnDust('jump', behindX, feetY, player.flipX);
+    }
   }
   const landing = t < (player.getData('landUntil') ?? 0);
 
@@ -231,6 +240,14 @@ export function updateJohn(player, input) {
         player.setData('stepAlt', next);
         player.setData('lastStepAt', t);
         player.scene.sound.play(`snd_step${next}`, { volume: 0.8 });
+        // T4 game-feel: run dust con la misma cadencia ≥250ms (una instancia
+        // por paso), apoyado en los pies y espejado según el facing.
+        // Si falta la anim se omite.
+        if (typeof player.scene.spawnDust === 'function') {
+          const feetY = player.body?.bottom ?? player.y + BODY_STAND.h / 2;
+          const behindX = player.x + (player.flipX ? 1 : -1);
+          player.scene.spawnDust('run', behindX, feetY, player.flipX);
+        }
       }
     }
   } else if (hitting) {

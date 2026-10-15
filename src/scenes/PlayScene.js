@@ -25,6 +25,9 @@ export const FX_DEPTH = 10;
 // T1 game-feel: desfase del clip de recarga respecto al último disparo (ms),
 // para no solaparse con `snd_rifle_shot` y que se distinga.
 const RELOAD_SFX_DELAY = 120;
+// T4 game-feel: shake de daño a John (T15 lo centraliza en shakeCam).
+export const HIT_SHAKE_MS = 120;
+export const HIT_SHAKE_INTENSITY = 0.004;
 export default class PlayScene extends Phaser.Scene {
   constructor() {
     super('Play');
@@ -49,6 +52,9 @@ export default class PlayScene extends Phaser.Scene {
     this.lastShotAt = Number.NEGATIVE_INFINITY;
     this.reloadTimer = null;
     this.reloadSfxTimer = null;
+    // T4 game-feel: flags de daño para el HUD de T13 (sin parpadeo).
+    this.registry.set('invuln', false);
+    this.registry.set('hitAt', 0);
   }
 
   preload() {
@@ -147,6 +153,16 @@ export default class PlayScene extends Phaser.Scene {
       frameWidth: 20,
       frameHeight: 20,
     });
+    // T4 game-feel: dust provisional pendiente de T5 (run 108x18 → 6f 18x18,
+    // jump 204x10 → 6f 34x10; ambas divisiones exactas por 6).
+    this.load.spritesheet('run-dust-anim', 'assets/fx/run_dust.png', {
+      frameWidth: 18,
+      frameHeight: 18,
+    });
+    this.load.spritesheet('jump-dust-anim', 'assets/fx/jump_dust.png', {
+      frameWidth: 34,
+      frameHeight: 10,
+    });
   }
 
   create() {
@@ -220,6 +236,24 @@ export default class PlayScene extends Phaser.Scene {
         key: 'bullet-impact',
         frames: this.anims.generateFrameNumbers('bullet-impact-anim', { start: 0, end: 4 }),
         frameRate: 16,
+        repeat: 0,
+      });
+    }
+    // T4 game-feel: dust de correr/aterrizar (provisional; T5 confirma frames).
+    // Guarda anims.exists: si falta la textura el fx se omite sin excepción.
+    if (!this.anims.exists('run-dust')) {
+      this.anims.create({
+        key: 'run-dust',
+        frames: this.anims.generateFrameNumbers('run-dust-anim', { start: 0, end: 5 }),
+        frameRate: 12,
+        repeat: 0,
+      });
+    }
+    if (!this.anims.exists('jump-dust')) {
+      this.anims.create({
+        key: 'jump-dust',
+        frames: this.anims.generateFrameNumbers('jump-dust-anim', { start: 0, end: 5 }),
+        frameRate: 12,
         repeat: 0,
       });
     }
@@ -441,6 +475,28 @@ export default class PlayScene extends Phaser.Scene {
     });
   }
 
+  // T4 game-feel: dust a pies, autodestruible (una instancia por llamada;
+  // el flanco lo regula player.js: aterrizaje real y pasos ≥250ms).
+  // Origen abajo-centro: (x, y) es el punto de pies sobre el suelo, así el
+  // puff apoya encima del piso en vez de hundirse (antes: centro en y+10).
+  // flipX espeja según el facing de John. Si falta la anim se omite.
+  spawnDust(kind, x, y, flipX = false) {
+    const key = kind === 'jump' ? 'jump-dust' : 'run-dust';
+    const tex = kind === 'jump' ? 'jump-dust-anim' : 'run-dust-anim';
+    if (!this.anims.exists(key)) {
+      return null;
+    }
+    const fx = this.add.sprite(x, y, tex, 0);
+    fx.setOrigin(0.5, 1);
+    fx.setFlipX(!!flipX);
+    fx.setDepth(FX_DEPTH);
+    fx.play(key);
+    fx.once(`animationcomplete-${key}`, () => {
+      fx.destroy();
+    });
+    return fx;
+  }
+
   // Los callbacks de overlap de Arcade reciben (sprite, hijo-del-grupo),
   // no en el orden de registro (probado con trazas): se resuelve cada rol
   // por pertenencia al pool en vez de asumir posiciones.
@@ -505,7 +561,8 @@ export default class PlayScene extends Phaser.Scene {
     this.hitJohn(sourceX);
   }
 
-  // T4: John recibe un golpe (toque enemigo o bala): daño + knockback breve.
+  // T4 game-feel: John recibe un golpe (toque enemigo o bala): solo animación
+  // + shake, sin knockback ni parpadeo. El overlap ya es por bodies.
   hitJohn(sourceX) {
     // T3: sin doble daño durante muerte (guards active/dead/invuln vigentes).
     if (!this.john.active || this.john.getData('dead') || this.john.getData('invuln')) {
@@ -550,28 +607,27 @@ export default class PlayScene extends Phaser.Scene {
       this.john.setPosition(this.spawn.x, this.spawn.y);
       this.john.setVelocity(0, 0);
     } else if (sourceX !== null) {
-      const dir = this.john.x >= sourceX ? 1 : -1;
-      this.john.setVelocity(dir * 220, -180);
-      // T3 animaciones-john: feedback visual de golpe (el tween alpha sigue igual).
+      // T4 game-feel: SIN knockback (conserva trayectoria en salto) ni bypass
+      // por crouching: el overlap ya es por bodies. Solo anim + shake.
       // El hold evita que updateJohn lo pise con idle/run/jump al frame siguiente.
       this.john.setData('hitUntil', this.time.now + JOHN_HIT_HOLD);
       this.john.play('john-hit', true);
+      // T4: shake directo (T15 lo centraliza en shakeCam). Forzado para que
+      // se vea siempre (firma verificada en v4.2.1: shake(duration, intensity, force)).
+      this.cameras.main.shake(HIT_SHAKE_MS, HIT_SHAKE_INTENSITY, true);
     }
-    // Invulnerabilidad breve con parpadeo para no encadenar golpes.
+    // T4 game-feel: invulnerabilidad 1000ms SIN parpadeo (alpha fijo en 1);
+    // se publica en registry para el HUD de T13.
     this.john.setData('invuln', true);
-    this.tweens.killTweensOf(this.john);
-    this.tweens.add({
-      targets: this.john,
-      alpha: 0.3,
-      duration: 90,
-      yoyo: true,
-      repeat: 10,
-    });
+    this.john.setAlpha(1);
+    this.registry.set('invuln', true);
+    this.registry.set('hitAt', this.time.now);
     this.time.delayedCall(1000, () => {
       if (this.john.active) {
         this.john.setData('invuln', false);
         this.john.setAlpha(1);
       }
+      this.registry.set('invuln', false);
     });
   }
 

@@ -102,6 +102,10 @@ export default class PreloadScene extends Phaser.Scene {
     this.load.image('fx-particles-grunt', 'assets/fx/particles_grunt.png');
     this.load.image('fx-particles-turret', 'assets/fx/particles_turret.png');
     this.load.image('fx-particles-explosion', 'assets/fx/particles_explosion.png');
+    // T4 game-feel: gates de dust (Play carga 'run-dust-anim'/'jump-dust-anim'
+    // como spritesheet con otra key para evitar 'Texture key already in use').
+    this.load.image('fx-run-dust', 'assets/fx/run_dust.png');
+    this.load.image('fx-jump-dust', 'assets/fx/jump_dust.png');
   }
 
   create() {
