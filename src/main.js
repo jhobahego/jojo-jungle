@@ -4,6 +4,7 @@ import PreloadScene from './scenes/PreloadScene.js';
 import PlayScene from './scenes/PlayScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
 import HUDScene from './scenes/HUDScene.js';
+import PauseScene from './scenes/PauseScene.js';
 
 new Phaser.Game({
   type: Phaser.AUTO,
@@ -26,5 +27,5 @@ new Phaser.Game({
       debug: false,
     },
   },
-  scene: [BootScene, PreloadScene, PlayScene, GameOverScene, HUDScene],
+  scene: [BootScene, PreloadScene, PlayScene, GameOverScene, HUDScene, PauseScene],
 });

@@ -192,7 +192,14 @@ export default class PlayScene extends Phaser.Scene {
     this.keys = this.input.keyboard.addKeys('W,A,S,D,SPACE,Z,X');
     // T4: disparo único con C o clic.
     this.fireKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
+    // T4: disparo único con C o clic. El clic de "Reanudar" es de la
+    // escena Pause y nunca llega al input de Play pausado: sin flag.
     this.input.on('pointerdown', () => this.fireJohn());
+    // Pausa con ESC/P: congela Play (su reloj pausa timers enemigos) y
+    // abre Pause arriba; HUD queda congelado detrás. El toggle de vuelta
+    // vive en Pause (la escena pausada no procesa input).
+    this.input.keyboard.on('keydown-ESC', () => this.pauseGame());
+    this.input.keyboard.on('keydown-P', () => this.pauseGame());
 
     // T4: cadencia enemiga.
     this.grunt.setData(
@@ -234,6 +241,16 @@ export default class PlayScene extends Phaser.Scene {
     this.physics.add.existing(rect, true);
     this.platforms.add(rect);
     return rect;
+  }
+
+  // Pausa (spec escenario-pausa T2): pause congela update + timers del
+  // reloj propio (cadencia enemiga); launch abre Pause en paralelo arriba.
+  pauseGame() {
+    if (this.scene.isPaused('Play') || this.scene.isActive('Pause')) {
+      return;
+    }
+    this.scene.pause('Play');
+    this.scene.launch('Pause');
   }
 
   update() {
