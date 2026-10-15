@@ -13,6 +13,9 @@ export const BULLET_RANGE = 200;
 // Deuda combate MVP T2: gate de visión y agro para disparo y daño.
 export const CAM_MARGIN = 48;
 export const AGRO_RANGE = 200;
+// T2 game-feel: zona muerta frontal del grunt (px). Si John cae dentro,
+// o está a la espalda (signo distinto de `dir`), el grunt no dispara.
+export const GRUNT_FRONT_DEADZONE = 4;
 
 export function isOnCameraPlusMargin(scene, x, margin = CAM_MARGIN) {
   const view = scene.cameras.main.worldView;
@@ -151,6 +154,12 @@ export function gruntFire(scene, group, grunt, john) {
     return;
   }
   const dir = grunt.getData('dir');
+  // T2 game-feel: visión frontal — zona muerta ±4px o a la espalda: no dispara,
+  // no para patrulla, no suena. Cámara+margen y agro 200 se mantienen arriba.
+  const dx = john.x - grunt.x;
+  if (Math.abs(dx) <= GRUNT_FRONT_DEADZONE || Math.sign(dx) !== dir) {
+    return;
+  }
   grunt.setData('shooting', true);
   grunt.setVelocityX(0);
   grunt.play('grunt-shoot');
@@ -233,18 +242,16 @@ export function damageTurret(scene, turret) {
     if (timer) {
       timer.remove();
     }
+    // T2 game-feel: rota queda sólida y visible — body ON (staticSprite, sin
+    // mover el cuerpo ni refreshBody), 'turret-broke' sin destroy.
+    // Score +10 solo al romper (re-golpes retornan arriba por `dead`).
     if (turret.body) {
-      turret.body.enable = false;
+      turret.body.enable = true;
     }
     scene.registry.set('score', scene.registry.get('score') + 10);
     turret.play('turret-broke');
     // T4 sonidos: muerte de torreta (volumen SFX 0.8; el golpe no mortal sigue mudo).
     scene.sound.play('snd_explosion_ground', { volume: 0.8 });
-    turret.once('animationcomplete-turret-broke', () => {
-      if (turret.active) {
-        turret.destroy();
-      }
-    });
     return true;
   }
   turret.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);

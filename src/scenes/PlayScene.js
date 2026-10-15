@@ -171,6 +171,11 @@ export default class PlayScene extends Phaser.Scene {
     this.grunt = createGrunt(this, 500, 200);
     this.physics.add.collider(this.grunt, this.platforms);
     this.turret = createTurret(this, 880, 231);
+    // T2 game-feel: rota sólida y bajo John — collider físico (el daño va por
+    // overlap con early-return si `dead`) y depth rota < John.
+    this.john.setDepth(1);
+    this.turret.setDepth(0);
+    this.physics.add.collider(this.john, this.turret);
 
     // T4: balas con pool.
     this.bullets = this.physics.add.group({ maxSize: BULLET_MAX });
@@ -392,7 +397,13 @@ export default class PlayScene extends Phaser.Scene {
 
   onJohnBulletVsTurret(a, b) {
     const { bullet, victim: turret } = this.resolveJohnBullet(a, b);
-    if (!bullet.active || turret.getData('dead')) {
+    if (!bullet.active) {
+      return;
+    }
+    // T2 game-feel: la rota absorbe balas sin score/daño/re-golpe ni tint
+    // (el fx lo pone T3).
+    if (turret.getData('dead')) {
+      this.killBullet(bullet);
       return;
     }
     // T2 (deuda combate): sin daño fuera de cámara; la bala se recicla
