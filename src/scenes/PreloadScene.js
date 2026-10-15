@@ -41,6 +41,10 @@ const SOUND_ASSETS = [
   ['snd_select', 'assets/sounds/snd_select.ogg'],
 ];
 
+// Pausa (spec escenario-pausa T1): cursor UI, carga aditiva.
+// 'fnt_wonder32_custom.png' se probó como título y pinta el charset
+// completo sobre el menú (1102x30 sin .fnt): no se carga ni se usa.
+
 export default class PreloadScene extends Phaser.Scene {
   constructor() {
     super('Preload');
@@ -87,6 +91,8 @@ export default class PreloadScene extends Phaser.Scene {
     for (const [key, url] of SOUND_ASSETS) {
       this.load.audio(key, url);
     }
+
+    this.load.image('pause-cursor', 'assets/ui/gun_icon.png');
   }
 
   create() {
