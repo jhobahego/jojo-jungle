@@ -20,6 +20,21 @@ export const JOHN_HIT_HOLD = 250;
 export const BODY_STAND = { w: 18, h: 20, ox: 4, oy: 2 };
 const BODY_CROUCH = { w: 18, h: 14, ox: 4, oy: 12 };
 
+// T5 game-feel: boca del arma de John (offset en px desde john.x/john.y —
+// centro del sprite — hasta la punta del cañón, medido solo lectura con PIL).
+// - De pie `john_stand_shooting.png` 52x22 (2f 26x22): cañón en filas y=13..14,
+//   punta máx. en frame 0 x=23 (frame 1 llega a x=22). Punta (23,13.5) menos
+//   centro de frame (13,11) → dx=+10, dy=+2.5 → {dx:10,dy:3}.
+//   (Relativo al centro del body BODY_STAND (13,12): dx=10, dy≈+2.)
+// - Agachado `john_crouch_shoot.png` 52x26 (2f 26x26): cañón en filas y=22..23,
+//   punta máx. en frame 1 x=25 (frame 0 llega a x=24). Punta (25,22.5) menos
+//   centro de frame (13,13) → dx=+12, dy=+9.5 → {dx:12,dy:10}.
+//   (Relativo al centro del body BODY_CROUCH (13,19): dx=12, dy≈+4.)
+// Uso: x=john.x+dir*dx, y=john.y+dy (dir por flipX). El fx de boca de T8 usa
+// exactamente este mismo punto.
+export const JOHN_MUZZLE_STAND = { dx: 10, dy: 3 };
+export const JOHN_MUZZLE_CROUCH = { dx: 12, dy: 10 };
+
 function ensureAnims(scene) {
   const anims = scene.anims;
   if (!anims.exists('john-idle')) {

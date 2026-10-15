@@ -16,6 +16,16 @@ export const AGRO_RANGE = 200;
 // T2 game-feel: zona muerta frontal del grunt (px). Si John cae dentro,
 // o está a la espalda (signo distinto de `dir`), el grunt no dispara.
 export const GRUNT_FRONT_DEADZONE = 4;
+// T5 game-feel: boca del arma del grunt (offset en px desde grunt.x/grunt.y —
+// centro del sprite — hasta la punta del cañón, medido solo lectura con PIL).
+// `grunt_shoot.png` 52x22 (2f 26x22): frame 0 (pose de spawn, la bala sale
+// sincronizada con el play) con cañón en filas y=14..15 y punta x=23.
+// Punta (23,14.5) menos centro de frame (13,11) → dx=+10, dy=+3.5 → {dx:10,dy:4}.
+// (Frame 1 baja el cañón a y=16 con la misma dx=10; se usa el frame 0 porque
+// es lo visible al spawnear. Torreta no se toca: sigue `vec*12`.)
+// Uso: x=grunt.x+dir*dx, y=grunt.y+dy. El fx de boca de T8 usa este punto;
+// fireEnemyBullet ya lo guarda como spawnX/spawnY para BULLET_RANGE.
+export const GRUNT_MUZZLE = { dx: 10, dy: 4 };
 
 export function isOnCameraPlusMargin(scene, x, margin = CAM_MARGIN) {
   const view = scene.cameras.main.worldView;
@@ -134,7 +144,7 @@ export function fireEnemyBullet(scene, group, x, y, dirX, dirY = 0, speed = ENEM
     return;
   }
   bullet.enableBody(true, x, y, true, true);
-  // T3 game-feel: reset visual + bala animada (punto de spawn lo fija T18).
+  // T3 game-feel: reset visual + bala animada (punto de spawn lo fija T5).
   // Un pase sincronizado al vuelo enemigo (~1.25s a 6fps); el impacto corta.
   // Cabeza a la derecha en frame 0: flipX según signo horizontal (la
   // rotación completa en 8 dirs de torreta la pone T10).
@@ -177,7 +187,18 @@ export function gruntFire(scene, group, grunt, john) {
   grunt.setData('shooting', true);
   grunt.setVelocityX(0);
   grunt.play('grunt-shoot');
-  fireEnemyBullet(scene, group, grunt.x + dir * 12, grunt.y, dir, 0, ENEMY_BULLET_SPEED);
+  // T5 game-feel: la bala nace en la boca del arma (GRUNT_MUZZLE), no arriba.
+  // fireEnemyBullet guarda este punto como spawnX/spawnY (BULLET_RANGE mide
+  // distancia recorrida desde ahí). Sin tocar velocidad, rango ni torreta.
+  fireEnemyBullet(
+    scene,
+    group,
+    grunt.x + dir * GRUNT_MUZZLE.dx,
+    grunt.y + GRUNT_MUZZLE.dy,
+    dir,
+    0,
+    ENEMY_BULLET_SPEED,
+  );
   // T4 sonidos: disparo grunt con el mismo rifle que John (volumen SFX 0.8).
   scene.sound.play('snd_rifle_shot', { volume: 0.8 });
   grunt.once('animationcomplete-grunt-shoot', () => {

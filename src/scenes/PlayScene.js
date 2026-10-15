@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { JOHN_FIRE_DELAY, JOHN_HIT_HOLD, JOHN_SHOOT_HOLD, RELOAD_DELAY, createJohn, updateJohn } from '../player.js';
+import { JOHN_FIRE_DELAY, JOHN_HIT_HOLD, JOHN_MUZZLE_CROUCH, JOHN_MUZZLE_STAND, JOHN_SHOOT_HOLD, RELOAD_DELAY, createJohn, updateJohn } from '../player.js';
 import {
   BULLET_RANGE,
   GRUNT_FIRE_DELAY,
@@ -377,8 +377,9 @@ export default class PlayScene extends Phaser.Scene {
   // T4: disparo de John (pool, una bala por pulsación).
   // T1 game-feel: orden estricto (1) cooldown 150ms / reloading → ignora
   // silencioso sin tocar lastShotAt; (2) pool.get null → aborta sin gastar
-  // ammo ni cooldown; (3) gasta 1, fija lastShotAt, spawnea (punto exacto y
-  // 'bullet-fly' los ponen T18/T3). Al vaciar inicia recarga 900ms con un
+  // ammo ni cooldown; (3) gasta 1, fija lastShotAt, spawnea en la boca del
+  // arma según postura (T5) con 'bullet-fly' (T3). Al vaciar inicia recarga
+  // 900ms con un
   // solo snd_reload_clip desfasado 120ms del último disparo.
   fireJohn() {
     // T3 animaciones-john: muerto ignora input (no dispara ni re-anima).
@@ -395,8 +396,12 @@ export default class PlayScene extends Phaser.Scene {
       return;
     }
     const dir = this.john.flipX ? -1 : 1;
-    const x = this.john.x + dir * 14;
-    const y = this.john.y - 2;
+    // T5 game-feel: la bala nace en la boca del arma según postura
+    // (JOHN_MUZZLE_STAND de pie, JOHN_MUZZLE_CROUCH agachado), con dir de
+    // flipX aplicado al dx. Reemplaza el fijo +14/-2.
+    const muzzle = this.john.getData('crouching') ? JOHN_MUZZLE_CROUCH : JOHN_MUZZLE_STAND;
+    const x = this.john.x + dir * muzzle.dx;
+    const y = this.john.y + muzzle.dy;
     // (2) Pool agotado: aborta sin gastar ammo ni cooldown.
     const bullet = this.bullets.get(x, y, 'john-bullet', 0);
     if (!bullet) {
@@ -404,7 +409,8 @@ export default class PlayScene extends Phaser.Scene {
     }
     // (3) Spawn + gasto.
     bullet.enableBody(true, x, y, true, true);
-    // T3 game-feel: reset visual (punto de spawn exacto lo fija T18; acá solo animar).
+    // T3 game-feel: reset visual (el punto de spawn exacto lo fija T5 arriba;
+    // acá solo animar).
     // El frame 0 tiene la cabeza a la derecha: flipX espeja al disparar a la
     // izquierda para que la punta mire el sentido del vuelo.
     bullet.setRotation(0);
