@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { JOHN_HIT_HOLD, JOHN_SHOOT_HOLD, createJohn, updateJohn } from '../player.js';
+import { JOHN_FIRE_DELAY, JOHN_HIT_HOLD, JOHN_SHOOT_HOLD, RELOAD_DELAY, createJohn, updateJohn } from '../player.js';
 import {
   BULLET_RANGE,
   GRUNT_FIRE_DELAY,
@@ -20,6 +20,9 @@ import {
 // T4: disparo de John, grunt + torreta, daño/muerte, caída al vacío y game over.
 // T5: HUD lanzado en paralelo; vidas/score/ammo viven en registry.
 const BULLET_MAX = 12;
+// T1 game-feel: desfase del clip de recarga respecto al último disparo (ms),
+// para no solaparse con `snd_rifle_shot` y que se distinga.
+const RELOAD_SFX_DELAY = 120;
 export default class PlayScene extends Phaser.Scene {
   constructor() {
     super('Play');
@@ -33,9 +36,17 @@ export default class PlayScene extends Phaser.Scene {
     // T4: vidas y puntos del run (T5 los mostrará en el HUD).
     this.registry.set('hp', 3);
     this.registry.set('score', 0);
-    // T5: ammo = balas disponibles del pool (se gasta al disparar,
-    // se devuelve al reciclarse o impactar cada bala de John).
+    // T5: ammo = balas disponibles del cartucho (se gasta al disparar,
+    // sin refund al impactar/expirar). T1 game-feel: cartucho == pool max
+    // (BULLET_MAX es a la vez maxSize del grupo y capacidad del cartucho).
     this.registry.set('ammo', BULLET_MAX);
+    // T1 game-feel: estado de cooldown + recarga (se publica en registry
+    // para el HUD de T13).
+    this.registry.set('reloading', false);
+    this.reloading = false;
+    this.lastShotAt = Number.NEGATIVE_INFINITY;
+    this.reloadTimer = null;
+    this.reloadSfxTimer = null;
   }
 
   preload() {
@@ -190,8 +201,11 @@ export default class PlayScene extends Phaser.Scene {
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,SPACE,Z,X');
-    // T4: disparo único con C o clic.
+    // T1 game-feel: disparo en ráfaga con C o clic (izq./der.) mantenido.
     this.fireKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
+    // T1 game-feel: el botón derecho también dispara; se deshabilita el menú
+    // contextual del canvas para que no estorbe (API verificada en v4.2.1).
+    this.input.mouse.disableContextMenu();
     // T4: disparo único con C o clic. El clic de "Reanudar" es de la
     // escena Pause y nunca llega al input de Play pausado: sin flag.
     this.input.on('pointerdown', () => this.fireJohn());
@@ -255,8 +269,14 @@ export default class PlayScene extends Phaser.Scene {
 
   update() {
     updateJohn(this.john, { cursors: this.cursors, keys: this.keys, now: this.time.now });
-    if (Phaser.Input.Keyboard.JustDown(this.fireKey)) {
-      this.fireJohn();
+    // T1 game-feel: ráfaga mientras C o el puntero están presionados; el
+    // cooldown de fireJohn regula la cadencia (una pulsación suelta dispara una vez).
+    // La escena pausada no corre update, así que el clic de "Reanudar" no dispara.
+    {
+      const pointer = this.input.activePointer;
+      if (this.fireKey.isDown || pointer.isDown || pointer.rightButtonDown()) {
+        this.fireJohn();
+      }
     }
     updateGrunt(this.grunt);
     updateTurret(this.turret, this.john);
@@ -273,24 +293,39 @@ export default class PlayScene extends Phaser.Scene {
   }
 
   // T4: disparo de John (pool, una bala por pulsación).
+  // T1 game-feel: orden estricto (1) cooldown 150ms / reloading → ignora
+  // silencioso sin tocar lastShotAt; (2) pool.get null → aborta sin gastar
+  // ammo ni cooldown; (3) gasta 1, fija lastShotAt, spawnea (punto exacto y
+  // 'bullet-fly' los ponen T18/T3). Al vaciar inicia recarga 900ms con un
+  // solo snd_reload_clip desfasado 120ms del último disparo.
   fireJohn() {
     // T3 animaciones-john: muerto ignora input (no dispara ni re-anima).
     if (!this.john.active || this.john.getData('dead')) {
       return;
     }
+    // (1) Recargando o en cooldown: ignora (intentos en recarga silenciosos,
+    // resto sin sonido ni bala, sin tocar lastShotAt).
+    if (this.reloading) {
+      return;
+    }
+    const now = this.time.now;
+    if (now - this.lastShotAt < JOHN_FIRE_DELAY) {
+      return;
+    }
     const dir = this.john.flipX ? -1 : 1;
     const x = this.john.x + dir * 14;
     const y = this.john.y - 2;
+    // (2) Pool agotado: aborta sin gastar ammo ni cooldown.
     const bullet = this.bullets.get(x, y, 'john-bullet', 0);
     if (!bullet) {
-      // T3 sonidos: pool vacío → feedback de recarga (volumen SFX 0.8).
-      this.sound.play('snd_reload_clip', { volume: 0.8 });
       return;
     }
+    // (3) Spawn + gasto.
     bullet.enableBody(true, x, y, true, true);
     bullet.setData('spawnX', x);
     bullet.setVelocityX(dir * 340);
     bullet.body.setAllowGravity(false);
+    this.lastShotAt = now;
     // T3 sonidos: disparo de John (volumen SFX 0.8).
     this.sound.play('snd_rifle_shot', { volume: 0.8 });
     // T1 animaciones-john: feedback visual de disparo (no toca bala/spawn/ammo).
@@ -304,17 +339,30 @@ export default class PlayScene extends Phaser.Scene {
     } else {
       this.john.play('john-stand-shoot', true);
     }
-    // T5: gastar ammo (el HUD escucha changedata-ammo).
-    this.registry.set('ammo', this.registry.get('ammo') - 1);
+    // T1 game-feel: gastar 1 ammo (el HUD escucha changedata-ammo); al
+    // vaciar (no al reintentar) inicia recarga 900ms con un solo clip
+    // desfasado 120ms para no solaparse con el último disparo (reloj de
+    // Play: se congela en pausa; T16 cancela los handles en restart).
+    const ammo = this.registry.get('ammo') - 1;
+    this.registry.set('ammo', ammo);
+    if (ammo <= 0) {
+      this.reloading = true;
+      this.registry.set('reloading', true);
+      this.reloadSfxTimer = this.time.delayedCall(RELOAD_SFX_DELAY, () => {
+        this.sound.play('snd_reload_clip', { volume: 0.8 });
+        this.reloadSfxTimer = null;
+      });
+      this.reloadTimer = this.time.delayedCall(RELOAD_DELAY, () => {
+        this.registry.set('ammo', BULLET_MAX);
+        this.reloading = false;
+        this.registry.set('reloading', false);
+        this.reloadTimer = null;
+      });
+    }
   }
 
   killBullet(bullet) {
     bullet.disableBody(true, true);
-  }
-
-  // T5: devolver ammo al pool (solo balas de John).
-  refundAmmo() {
-    this.registry.set('ammo', this.registry.get('ammo') + 1);
   }
 
   // Los callbacks de overlap de Arcade reciben (sprite, hijo-del-grupo),
@@ -332,14 +380,13 @@ export default class PlayScene extends Phaser.Scene {
     if (!bullet.active || grunt.getData('dead')) {
       return;
     }
-    // T2 (deuda combate): sin daño fuera de cámara; la bala se recicla con refund.
+    // T2 (deuda combate): sin daño fuera de cámara; la bala se recicla
+    // sin refund (T1 game-feel: el cartucho no devuelve ammo).
     if (!isOnCameraPlusMargin(this, bullet.x) || !isOnCameraPlusMargin(this, grunt.x)) {
       this.killBullet(bullet);
-      this.refundAmmo();
       return;
     }
     this.killBullet(bullet);
-    this.refundAmmo();
     damageGrunt(this, grunt);
   }
 
@@ -348,14 +395,13 @@ export default class PlayScene extends Phaser.Scene {
     if (!bullet.active || turret.getData('dead')) {
       return;
     }
-    // T2 (deuda combate): sin daño fuera de cámara; la bala se recicla con refund.
+    // T2 (deuda combate): sin daño fuera de cámara; la bala se recicla
+    // sin refund (T1 game-feel: el cartucho no devuelve ammo).
     if (!isOnCameraPlusMargin(this, bullet.x) || !isOnCameraPlusMargin(this, turret.x)) {
       this.killBullet(bullet);
-      this.refundAmmo();
       return;
     }
     this.killBullet(bullet);
-    this.refundAmmo();
     damageTurret(this, turret);
   }
 
@@ -462,11 +508,8 @@ export default class PlayScene extends Phaser.Scene {
         bullet.y < -30 ||
         bullet.y > this.levelHeight + 90
       ) {
+        // T1 game-feel: expirar por rango no devuelve ammo (solo killBullet).
         this.killBullet(bullet);
-        // T5: solo las balas de John devuelven ammo.
-        if (group === this.bullets) {
-          this.refundAmmo();
-        }
       }
     }
   }

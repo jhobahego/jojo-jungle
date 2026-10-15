@@ -7,6 +7,10 @@ export const JOHN_SPEED = 120;
 export const JOHN_JUMP = 280;
 // T1 animaciones-john: ms que la pose de disparo sobrevive a idle/run.
 export const JOHN_SHOOT_HOLD = 250;
+// T1 game-feel: cadencia de disparo de John (ms entre balas).
+export const JOHN_FIRE_DELAY = 150;
+// T1 game-feel: recarga del cartucho al agotarse (ms hasta volver a AMMO llena).
+export const RELOAD_DELAY = 900;
 // T3 animaciones-john: ms que la pose de golpe sobrevive a idle/run/jump.
 // john-hit son 2f a 8fps ≈ 250ms, igual que el hold de disparo.
 export const JOHN_HIT_HOLD = 250;
