@@ -20,6 +20,8 @@ import {
 // T4: disparo de John, grunt + torreta, daño/muerte, caída al vacío y game over.
 // T5: HUD lanzado en paralelo; vidas/score/ammo viven en registry.
 const BULLET_MAX = 12;
+// T3 game-feel: depth de fx de impacto (personajes 0/1, HUD en escena aparte).
+export const FX_DEPTH = 10;
 // T1 game-feel: desfase del clip de recarga respecto al último disparo (ms),
 // para no solaparse con `snd_rifle_shot` y que se distinga.
 const RELOAD_SFX_DELAY = 120;
@@ -135,6 +137,16 @@ export default class PlayScene extends Phaser.Scene {
       frameWidth: 18,
       frameHeight: 18,
     });
+    // T3 game-feel: bala animada (weapon_bullet 64x8 → 8f 8x8) e impacto
+    // (bullet_impact 100x20 → 5f 20x20 provisional; T5 confirma el frame).
+    this.load.spritesheet('bullet-fly-anim', 'assets/player/weapon_bullet.png', {
+      frameWidth: 8,
+      frameHeight: 8,
+    });
+    this.load.spritesheet('bullet-impact-anim', 'assets/fx/bullet_impact.png', {
+      frameWidth: 20,
+      frameHeight: 20,
+    });
   }
 
   create() {
@@ -180,6 +192,37 @@ export default class PlayScene extends Phaser.Scene {
     // T4: balas con pool.
     this.bullets = this.physics.add.group({ maxSize: BULLET_MAX });
     this.enemyBullets = this.physics.add.group({ maxSize: 20 });
+
+    // T3 game-feel: anims de bala e impacto (guarda anims.exists; si falta
+    // la textura el fx se omite sin excepción en spawnBulletImpact).
+    // Ajuste: un solo pase por vuelo (repeat 0) sincronizado a la duración
+    // del vuelo — John 200px a 340px/s ≈ 588ms → 12fps; enemigas 200px a
+    // 160/150px/s ≈ 1.25s → 6fps. play(key, true) al spawnear garantiza el
+    // frame 0 y el impacto/reciclado corta la anim (no loopea nunca).
+    if (!this.anims.exists('bullet-fly')) {
+      this.anims.create({
+        key: 'bullet-fly',
+        frames: this.anims.generateFrameNumbers('bullet-fly-anim', { start: 0, end: 7 }),
+        frameRate: 12,
+        repeat: 0,
+      });
+    }
+    if (!this.anims.exists('bullet-fly-enemy')) {
+      this.anims.create({
+        key: 'bullet-fly-enemy',
+        frames: this.anims.generateFrameNumbers('bullet-fly-anim', { start: 0, end: 7 }),
+        frameRate: 6,
+        repeat: 0,
+      });
+    }
+    if (!this.anims.exists('bullet-impact')) {
+      this.anims.create({
+        key: 'bullet-impact',
+        frames: this.anims.generateFrameNumbers('bullet-impact-anim', { start: 0, end: 4 }),
+        frameRate: 16,
+        repeat: 0,
+      });
+    }
 
     // T4: overlaps (uno por pareja, solo en create).
     this.physics.add.overlap(this.bullets, this.grunt, (bullet, grunt) =>
@@ -327,6 +370,20 @@ export default class PlayScene extends Phaser.Scene {
     }
     // (3) Spawn + gasto.
     bullet.enableBody(true, x, y, true, true);
+    // T3 game-feel: reset visual (punto de spawn exacto lo fija T18; acá solo animar).
+    // El frame 0 tiene la cabeza a la derecha: flipX espeja al disparar a la
+    // izquierda para que la punta mire el sentido del vuelo.
+    bullet.setRotation(0);
+    bullet.setFlipX(dir < 0);
+    bullet.clearTint();
+    bullet.setAlpha(1);
+    bullet.setScale(1);
+    if (this.anims.exists('bullet-fly')) {
+      // Sin `ignoreIfPlaying`: el pool reusa balas con la anim congelada en
+      // el frame de muerte (casi siempre el 7, vacío); hay que reiniciar
+      // siempre para garantizar frame 0 en cada spawn.
+      bullet.play('bullet-fly');
+    }
     bullet.setData('spawnX', x);
     bullet.setVelocityX(dir * 340);
     bullet.body.setAllowGravity(false);
@@ -370,6 +427,20 @@ export default class PlayScene extends Phaser.Scene {
     bullet.disableBody(true, true);
   }
 
+  // T3 game-feel: fx de impacto en el centro del body, autodestruible con
+  // once(animationcomplete → destroy). Si falta la anim se omite sin excepción.
+  spawnBulletImpact(x, y) {
+    if (!this.anims.exists('bullet-impact')) {
+      return;
+    }
+    const fx = this.add.sprite(x, y, 'bullet-impact-anim', 0);
+    fx.setDepth(FX_DEPTH);
+    fx.play('bullet-impact');
+    fx.once('animationcomplete-bullet-impact', () => {
+      fx.destroy();
+    });
+  }
+
   // Los callbacks de overlap de Arcade reciben (sprite, hijo-del-grupo),
   // no en el orden de registro (probado con trazas): se resuelve cada rol
   // por pertenencia al pool en vez de asumir posiciones.
@@ -391,6 +462,7 @@ export default class PlayScene extends Phaser.Scene {
       this.killBullet(bullet);
       return;
     }
+    this.spawnBulletImpact(bullet.x, bullet.y);
     this.killBullet(bullet);
     damageGrunt(this, grunt);
   }
@@ -403,6 +475,7 @@ export default class PlayScene extends Phaser.Scene {
     // T2 game-feel: la rota absorbe balas sin score/daño/re-golpe ni tint
     // (el fx lo pone T3).
     if (turret.getData('dead')) {
+      this.spawnBulletImpact(bullet.x, bullet.y);
       this.killBullet(bullet);
       return;
     }
@@ -412,6 +485,7 @@ export default class PlayScene extends Phaser.Scene {
       this.killBullet(bullet);
       return;
     }
+    this.spawnBulletImpact(bullet.x, bullet.y);
     this.killBullet(bullet);
     damageTurret(this, turret);
   }
@@ -426,6 +500,7 @@ export default class PlayScene extends Phaser.Scene {
       return;
     }
     const sourceX = bullet.x;
+    this.spawnBulletImpact(bullet.x, bullet.y);
     this.killBullet(bullet);
     this.hitJohn(sourceX);
   }

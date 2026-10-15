@@ -134,6 +134,20 @@ export function fireEnemyBullet(scene, group, x, y, dirX, dirY = 0, speed = ENEM
     return;
   }
   bullet.enableBody(true, x, y, true, true);
+  // T3 game-feel: reset visual + bala animada (punto de spawn lo fija T18).
+  // Un pase sincronizado al vuelo enemigo (~1.25s a 6fps); el impacto corta.
+  // Cabeza a la derecha en frame 0: flipX según signo horizontal (la
+  // rotación completa en 8 dirs de torreta la pone T10).
+  bullet.setRotation(0);
+  bullet.setFlipX(dirX < 0);
+  bullet.clearTint();
+  bullet.setAlpha(1);
+  bullet.setScale(1);
+  if (scene.anims.exists('bullet-fly-enemy')) {
+    // Sin `ignoreIfPlaying`: igual que en fireJohn, el pool reusa entradas
+    // con la anim congelada; reinicio forzado a frame 0 en cada spawn.
+    bullet.play('bullet-fly-enemy');
+  }
   bullet.setData('spawnX', x);
   bullet.setData('spawnY', y);
   bullet.setVelocity(dirX * speed, dirY * speed);
