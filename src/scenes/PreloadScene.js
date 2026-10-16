@@ -106,6 +106,37 @@ export default class PreloadScene extends Phaser.Scene {
     // como spritesheet con otra key para evitar 'Texture key already in use').
     this.load.image('fx-run-dust', 'assets/fx/run_dust.png');
     this.load.image('fx-jump-dust', 'assets/fx/jump_dust.png');
+
+    // T6 game-feel: medición PIL solo-lectura (criterio: cada celda con
+    // >=1 px opaco y ninguna frontera corta un componente conectado).
+    // - bullet_impact 100x20 -> 5f 20x20 (fronteras 20/40 limpias; aro del
+    //   f3 roza 1px la frontera x=60 y chispas del f4 la x=80 — despreciable;
+    //   25x20 corta los aros por la mitad, peor). Confirma provisional T3.
+    // - particles_grunt/turret/explosion/dirt 12x2 -> 6f 2x2 CONFIRMADO
+    //   (cada celda es un color sólido; fila 1 duplica la 0; turret f6 es
+    //   chispa multicolor — sirve igual como frame aleatorio).
+    // - explosion_smoke 864x72 -> 12f 72x72, frame 12 vacío (disipación
+    //   total; todas las fronteras caen en columnas de ceros). División
+    //   estrictamente válida sin celdas vacías: 6f 144x72 (T10 elige rango).
+    // - explosion_red 260x22 -> 10f 26x22 (fronteras limpias, todas no
+    //   vacías; f10 = 1px residuo de disipación).
+    // - run_dust 108x18 -> 6f 18x18, frame 6 vacío (puff 0-4 + fin).
+    //   Confirma provisional T4 (Play 'run-dust-anim' ya usa 18x18).
+    // - jump_dust 204x10 -> 6f 34x10, frame 6 vacío (puff 0-4 + fin).
+    //   Confirma provisional T4 (Play 'jump-dust-anim' ya usa 34x10).
+    // `shadow_char` NO se copia ni se carga. Sin anims ni uso todavía (T7/T10).
+    this.load.spritesheet('fx-explosion-smoke', 'assets/fx/explosion_smoke.png', {
+      frameWidth: 72,
+      frameHeight: 72,
+    });
+    this.load.spritesheet('fx-explosion-red', 'assets/fx/explosion_red.png', {
+      frameWidth: 26,
+      frameHeight: 22,
+    });
+    this.load.spritesheet('fx-particles-dirt', 'assets/fx/particles_dirt.png', {
+      frameWidth: 2,
+      frameHeight: 2,
+    });
   }
 
   create() {
