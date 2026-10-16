@@ -97,7 +97,8 @@ export default class PreloadScene extends Phaser.Scene {
     // T3 game-feel: gate de fx (solo esos 4; keys fx-* distintas a las de
     // PlayScene.preload para evitar 'Texture key already in use').
     // Play carga 'bullet-fly-anim'/'bullet-impact-anim' como spritesheet;
-    // las partículas las usa T6 (spritesheet 2x2 si T5 lo confirma).
+    // T7 usa las partículas en PlayScene.preload como spritesheet 2x2
+    // (keys 'particles-*', distintas de estos gates 'fx-particles-*').
     this.load.image('fx-bullet-impact', 'assets/fx/bullet_impact.png');
     this.load.image('fx-particles-grunt', 'assets/fx/particles_grunt.png');
     this.load.image('fx-particles-turret', 'assets/fx/particles_turret.png');

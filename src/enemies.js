@@ -285,6 +285,16 @@ export function damageTurret(scene, turret) {
     }
     scene.registry.set('score', scene.registry.get('score') + 10);
     turret.play('turret-broke');
+    // T7 game-feel: HP 0 → ráfaga 'explosion' (14) en el centro de la
+    // torreta (el count vive en FX_PRESETS de PlayScene). Si la escena no
+    // expone emitFx se omite sin excepción; nunca bloquea score/daño.
+    try {
+      if (typeof scene.emitFx === 'function') {
+        scene.emitFx('explosion', turret.x, turret.y, 0);
+      }
+    } catch {
+      // Fx opcional: un fallo de partículas nunca rompe el gameplay.
+    }
     // T4 sonidos: muerte de torreta (volumen SFX 0.8; el golpe no mortal sigue mudo).
     scene.sound.play('snd_explosion_ground', { volume: 0.8 });
     return true;

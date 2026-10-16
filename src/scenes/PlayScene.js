@@ -28,6 +28,48 @@ const RELOAD_SFX_DELAY = 120;
 // T4 game-feel: shake de daño a John (T15 lo centraliza en shakeCam).
 export const HIT_SHAKE_MS = 120;
 export const HIT_SHAKE_INTENSITY = 0.004;
+// T7 game-feel: tope global de partículas vivas (si se supera se omite el fx,
+// nunca balas, daño ni score). 4 emitters con ráfagas <0.5s; 10 impactos
+// simultáneos ≈ 140 vivas, 200 deja margen sin picos de GC.
+export const FX_MAX_PARTICLES = 200;
+// T7 game-feel: presets por kind (cantidad = explode count; lifespan 250–450ms;
+// alpha start→0; scale; gravityY de partícula). Conexiones: John golpeado →
+// grunt (6), torreta viva golpeada → turret (5), HP 0 → explosion (14);
+// dirt queda creado para T12 (impacto contra entorno).
+export const FX_PRESETS = {
+  grunt: {
+    count: 6,
+    speed: { min: 40, max: 140 },
+    lifespan: { min: 250, max: 400 },
+    alpha: { start: 1, end: 0 },
+    scale: { start: 1, end: 0 },
+    gravityY: 120,
+  },
+  turret: {
+    count: 5,
+    speed: { min: 40, max: 130 },
+    lifespan: { min: 250, max: 400 },
+    alpha: { start: 1, end: 0 },
+    scale: { start: 1, end: 0 },
+    gravityY: 100,
+  },
+  explosion: {
+    count: 14,
+    speed: { min: 60, max: 220 },
+    lifespan: { min: 300, max: 450 },
+    alpha: { start: 1, end: 0 },
+    scale: { start: 2, end: 0 },
+    gravityY: 80,
+  },
+  dirt: {
+    count: 5,
+    speed: { min: 30, max: 100 },
+    lifespan: { min: 250, max: 400 },
+    alpha: { start: 1, end: 0 },
+    scale: { start: 1, end: 0 },
+    gravityY: 300,
+  },
+};
 export default class PlayScene extends Phaser.Scene {
   constructor() {
     super('Play');
@@ -163,6 +205,26 @@ export default class PlayScene extends Phaser.Scene {
       frameWidth: 34,
       frameHeight: 10,
     });
+    // T7 game-feel: partículas 12x2 → 6f 2x2 CONFIRMADO por T6 (cada celda un
+    // color sólido; fila 1 duplica la 0). Keys 'particles-*' distintas a los
+    // gates 'fx-particles-*' de PreloadScene para evitar 'Texture key already
+    // in use'. Frame aleatorio por partícula (frame: [0..5] en el emitter).
+    this.load.spritesheet('particles-grunt', 'assets/fx/particles_grunt.png', {
+      frameWidth: 2,
+      frameHeight: 2,
+    });
+    this.load.spritesheet('particles-turret', 'assets/fx/particles_turret.png', {
+      frameWidth: 2,
+      frameHeight: 2,
+    });
+    this.load.spritesheet('particles-explosion', 'assets/fx/particles_explosion.png', {
+      frameWidth: 2,
+      frameHeight: 2,
+    });
+    this.load.spritesheet('particles-dirt', 'assets/fx/particles_dirt.png', {
+      frameWidth: 2,
+      frameHeight: 2,
+    });
   }
 
   create() {
@@ -256,6 +318,41 @@ export default class PlayScene extends Phaser.Scene {
         frameRate: 12,
         repeat: 0,
       });
+    }
+
+    // T7 game-feel: 4 emitters UNA vez (emitting:false), se reutilizan con
+    // explode(n, x, y); nunca crear emitters por impacto. Frame aleatorio
+    // sobre los 6 frames 2x2 de T6, depth=FX_DEPTH, tope FX_MAX_PARTICLES.
+    // Firmas verificadas en v4.2.1 (node_modules/phaser/types/phaser.d.ts):
+    // add.particles(x, y, texture, config) → ParticleEmitter; explode(count,
+    // x, y); setEmitterAngle({min, max}); getAliveParticleCount().
+    // Si falta la textura se omite ese emitter sin excepción (guarda textures).
+    this.fxEmitters = {};
+    {
+      const fxTextures = {
+        grunt: 'particles-grunt',
+        turret: 'particles-turret',
+        explosion: 'particles-explosion',
+        dirt: 'particles-dirt',
+      };
+      for (const [kind, tex] of Object.entries(fxTextures)) {
+        const preset = FX_PRESETS[kind];
+        if (!preset || !this.textures.exists(tex)) {
+          continue;
+        }
+        const emitter = this.add.particles(0, 0, tex, {
+          frame: [0, 1, 2, 3, 4, 5],
+          speed: { min: preset.speed.min, max: preset.speed.max },
+          lifespan: { min: preset.lifespan.min, max: preset.lifespan.max },
+          alpha: { start: preset.alpha.start, end: preset.alpha.end },
+          scale: { start: preset.scale.start, end: preset.scale.end },
+          gravityY: preset.gravityY,
+          emitting: false,
+          maxAliveParticles: FX_MAX_PARTICLES,
+        });
+        emitter.setDepth(FX_DEPTH);
+        this.fxEmitters[kind] = emitter;
+      }
     }
 
     // T4: overlaps (uno por pareja, solo en create).
@@ -503,6 +600,42 @@ export default class PlayScene extends Phaser.Scene {
     return fx;
   }
 
+  // T7 game-feel: ráfaga reutilizable con ángulo sesgado hacia afuera según
+  // dir (1 = cono a la derecha, -1 = a la izquierda, 0 = radial). Usa
+  // explode(count, x, y) del emitter ya creado; nunca crea emitters.
+  // Si se supera FX_MAX_PARTICLES o falta el emitter se omite sin excepción
+  // (nunca se tocan balas, daño ni score).
+  emitFx(kind, x, y, dir = 0) {
+    const emitter = this.fxEmitters?.[kind];
+    const preset = FX_PRESETS[kind];
+    if (!emitter || !preset) {
+      return;
+    }
+    let alive = 0;
+    for (const e of Object.values(this.fxEmitters)) {
+      try {
+        alive += e.getAliveParticleCount();
+      } catch {
+        return;
+      }
+    }
+    if (alive >= FX_MAX_PARTICLES) {
+      return;
+    }
+    try {
+      if (dir > 0) {
+        emitter.setEmitterAngle({ min: -60, max: 60 });
+      } else if (dir < 0) {
+        emitter.setEmitterAngle({ min: 120, max: 240 });
+      } else {
+        emitter.setEmitterAngle({ min: 0, max: 360 });
+      }
+      emitter.explode(preset.count, x, y);
+    } catch {
+      // Fx opcional: un fallo de partículas nunca rompe el gameplay.
+    }
+  }
+
   // Los callbacks de overlap de Arcade reciben (sprite, hijo-del-grupo),
   // no en el orden de registro (probado con trazas): se resuelve cada rol
   // por pertenencia al pool en vez de asumir posiciones.
@@ -548,6 +681,9 @@ export default class PlayScene extends Phaser.Scene {
       return;
     }
     this.spawnBulletImpact(bullet.x, bullet.y);
+    // T7 game-feel: torreta viva golpeada → ráfaga 'turret' (5) en el punto
+    // de impacto, con ángulo sesgado según el vuelo de la bala de John.
+    this.emitFx('turret', bullet.x, bullet.y, Math.sign(bullet.body?.velocity?.x ?? 0));
     this.killBullet(bullet);
     damageTurret(this, turret);
   }
@@ -562,7 +698,11 @@ export default class PlayScene extends Phaser.Scene {
       return;
     }
     const sourceX = bullet.x;
+    // T7 game-feel: John golpeado → ráfaga 'grunt' (6) en el punto de impacto,
+    // con ángulo sesgado según el vuelo de la bala enemiga.
+    const bulletDirX = Math.sign(bullet.body?.velocity?.x ?? 0);
     this.spawnBulletImpact(bullet.x, bullet.y);
+    this.emitFx('grunt', bullet.x, bullet.y, bulletDirX);
     this.killBullet(bullet);
     this.hitJohn(sourceX);
   }
