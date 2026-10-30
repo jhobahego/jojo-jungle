@@ -658,6 +658,26 @@ export default class PlayScene extends Phaser.Scene {
     }
   }
 
+  // T9 game-feel: texto '+10' efímero al romper torreta (sin body; tween
+  // alpha + subida, autodestruido al completar).
+  spawnScorePopup(x, y) {
+    const popup = this.add.text(x, y - 14, '+10', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5);
+    popup.setDepth(FX_DEPTH);
+    this.tweens.add({
+      targets: popup,
+      y: y - 30,
+      alpha: 0,
+      duration: 600,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        if (popup.active) {
+          popup.destroy();
+        }
+      },
+    });
+    return popup;
+  }
+
   // Los callbacks de overlap de Arcade reciben (sprite, hijo-del-grupo),
   // no en el orden de registro (probado con trazas): se resuelve cada rol
   // por pertenencia al pool en vez de asumir posiciones.
@@ -707,7 +727,11 @@ export default class PlayScene extends Phaser.Scene {
     // de impacto, con ángulo sesgado según el vuelo de la bala de John.
     this.emitFx('turret', bullet.x, bullet.y, Math.sign(bullet.body?.velocity?.x ?? 0));
     this.killBullet(bullet);
-    damageTurret(this, turret);
+    const broke = damageTurret(this, turret);
+    // T9 game-feel: '+10' efímero solo al romper (broke); la rota absorbe sin popup.
+    if (broke && turret.active) {
+      this.spawnScorePopup(turret.x, turret.y);
+    }
   }
 
   onEnemyBulletVsJohn(john, bullet) {

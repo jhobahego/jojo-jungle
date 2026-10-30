@@ -39,6 +39,11 @@ export const TURRET_TELEGRAPH_MS = 250;
 // la textura (phaser.d.ts:128079), el llenado queda más claro que el cuerpo y
 // lee como "cargando"; distinto del blanco FILL del golpe en damageTurret.
 export const TURRET_TELEGRAPH_TINT = 0xb6b6d7;
+// T9 game-feel: feedback de impacto en enemigos vivos (tint + hit-pause +
+// stagger grunt). Duraciones fijas; el tint reinicia su timer sin acumular.
+export const ENEMY_HIT_TINT_MS = 120;
+export const HIT_PAUSE_MS = 60;
+export const GRUNT_STAGGER_MS = 150;
 
 export function isOnCameraPlusMargin(scene, x, margin = CAM_MARGIN) {
   const view = scene.cameras.main.worldView;
@@ -294,8 +299,108 @@ export function turretFire(scene, group, turret, john) {
 }
 
 // Devuelve true si el enemigo murió con este impacto.
+// T9 game-feel: helpers de feedback (tint + hit-pause + stagger). Solo actúan
+// sobre enemigo activo y vivo; el tint reinicia su timer (sin acumular) y el
+// hit-pause no reanuda si el enemigo murió durante la pausa.
+function applyHitTint(scene, enemy) {
+  if (!enemy.active || enemy.getData('dead')) {
+    return;
+  }
+  const prev = enemy.getData('hitTintTimer');
+  if (prev) {
+    prev.remove();
+  }
+  enemy.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
+  enemy.setData(
+    'hitTintTimer',
+    scene.time.delayedCall(ENEMY_HIT_TINT_MS, () => {
+      enemy.setData('hitTintTimer', null);
+      if (enemy.active && !enemy.getData('dead')) {
+        enemy.clearTint();
+      }
+    }),
+  );
+}
+
+function applyHitPause(scene, enemy) {
+  if (!enemy.active || enemy.getData('dead') || !enemy.anims) {
+    return;
+  }
+  const prev = enemy.getData('hitPauseTimer');
+  if (prev) {
+    prev.remove();
+  }
+  enemy.anims.pause();
+  enemy.setData(
+    'hitPauseTimer',
+    scene.time.delayedCall(HIT_PAUSE_MS, () => {
+      enemy.setData('hitPauseTimer', null);
+      if (enemy.active && !enemy.getData('dead') && enemy.anims) {
+        enemy.anims.resume();
+      }
+    }),
+  );
+}
+
+// T9 game-feel: stagger de grunt — frena 150ms y restaura la MISMA dir/velocidad
+// (sin cambiar `dir`). Con HP 1 el grunt muere de 1 tiro, así que esto solo se
+// vería si sobrevive al golpe; el caso real es la torreta viva.
+function applyGruntStagger(scene, grunt) {
+  if (!grunt.active || grunt.getData('dead')) {
+    return;
+  }
+  const prev = grunt.getData('staggerTimer');
+  if (prev) {
+    prev.remove();
+  }
+  const dir = grunt.getData('dir');
+  grunt.setVelocityX(0);
+  grunt.setData(
+    'staggerTimer',
+    scene.time.delayedCall(GRUNT_STAGGER_MS, () => {
+      grunt.setData('staggerTimer', null);
+      if (!grunt.active || grunt.getData('dead')) {
+        return;
+      }
+      grunt.setVelocityX(dir * GRUNT_SPEED);
+    }),
+  );
+}
+
+function clearHitFeedback(enemy) {
+  const tintTimer = enemy.getData('hitTintTimer');
+  if (tintTimer) {
+    tintTimer.remove();
+  }
+  enemy.setData('hitTintTimer', null);
+  const pauseTimer = enemy.getData('hitPauseTimer');
+  if (pauseTimer) {
+    pauseTimer.remove();
+  }
+  enemy.setData('hitPauseTimer', null);
+  const staggerTimer = enemy.getData('staggerTimer');
+  if (staggerTimer) {
+    staggerTimer.remove();
+  }
+  enemy.setData('staggerTimer', null);
+  if (enemy.anims) {
+    enemy.anims.resume();
+  }
+  enemy.clearTint();
+}
+
 export function damageGrunt(scene, grunt) {
   if (!grunt.active || grunt.getData('dead')) {
+    return false;
+  }
+  // T9 game-feel: con HP 1 el golpe es letal; si un futuro HP>1 sobrevive, el
+  // feedback es tint 120ms + hit-pause 60ms + stagger 150ms sin cambiar `dir`.
+  const hp = grunt.getData('hp') - 1;
+  grunt.setData('hp', hp);
+  if (hp > 0) {
+    applyHitTint(scene, grunt);
+    applyHitPause(scene, grunt);
+    applyGruntStagger(scene, grunt);
     return false;
   }
   grunt.setData('dead', true);
@@ -311,6 +416,10 @@ export function damageGrunt(scene, grunt) {
     telegraph.remove();
   }
   grunt.setData('telegraphTimer', null);
+  // T9 game-feel: con HP 1 el grunt muere de 1 tiro — el tint/hit-pause/stagger
+  // solo se verían si sobrevive; se limpia cualquier feedback previo para no
+  // manchar 'grunt-death' ni dejar timers huérfanos. La `dir` no se toca.
+  clearHitFeedback(grunt);
   if (grunt.body) {
     grunt.body.enable = false;
     grunt.setVelocity(0, 0);
@@ -346,7 +455,9 @@ export function damageTurret(scene, turret) {
       telegraph.remove();
     }
     turret.setData('telegraphTimer', null);
-    turret.clearTint();
+    // T9 game-feel: limpia tint/hit-pause previos para no manchar
+    // `turret-broke` ni dejar timers huérfanos (la rota no destella).
+    clearHitFeedback(turret);
     // T2 game-feel: rota queda sólida y visible — body ON (staticSprite, sin
     // mover el cuerpo ni refreshBody), 'turret-broke' sin destroy.
     // Score +10 solo al romper (re-golpes retornan arriba por `dead`).
@@ -369,11 +480,9 @@ export function damageTurret(scene, turret) {
     scene.sound.play('snd_explosion_ground', { volume: 0.8 });
     return true;
   }
-  turret.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
-  scene.time.delayedCall(120, () => {
-    if (turret.active && !turret.getData('dead')) {
-      turret.clearTint();
-    }
-  });
+  // T9 game-feel: torreta viva golpeada — tint blanco 120ms (reinicia timer) +
+  // hit-pause 60ms del sprite (sin reanudar si muere en la pausa).
+  applyHitTint(scene, turret);
+  applyHitPause(scene, turret);
   return false;
 }
