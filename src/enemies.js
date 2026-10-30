@@ -26,6 +26,19 @@ export const GRUNT_FRONT_DEADZONE = 4;
 // Uso: x=grunt.x+dir*dx, y=grunt.y+dy. El fx de boca de T8 usa este punto;
 // fireEnemyBullet ya lo guarda como spawnX/spawnY para BULLET_RANGE.
 export const GRUNT_MUZZLE = { dx: 10, dy: 4 };
+// T8 game-feel: anticipación de disparo del grunt (ms entre gates y salida de
+// la bala desde GRUNT_MUZZLE). Desplaza la SALIDA de la bala, no el período
+// (el fireTimer sigue cada 2200ms); la pose 'grunt-shoot' es el telegraph.
+export const GRUNT_TELEGRAPH_MS = 200;
+// T8 game-feel: pulso de telegraph de la torreta (ms antes de soltar la bala;
+// desplaza la salida, no el período de 2600ms).
+export const TURRET_TELEGRAPH_MS = 250;
+// T8 game-feel: tint fijo del pulso — destello claro en la familia del propio
+// metal de la torreta (paleta medida con PIL: cuerpo #42425a, brillo #87879f;
+// #87879f aclarado ~35% → #b6b6d7). Como TintModes.FILL reemplaza el color de
+// la textura (phaser.d.ts:128079), el llenado queda más claro que el cuerpo y
+// lee como "cargando"; distinto del blanco FILL del golpe en damageTurret.
+export const TURRET_TELEGRAPH_TINT = 0xb6b6d7;
 
 export function isOnCameraPlusMargin(scene, x, margin = CAM_MARGIN) {
   const view = scene.cameras.main.worldView;
@@ -187,20 +200,39 @@ export function gruntFire(scene, group, grunt, john) {
   grunt.setData('shooting', true);
   grunt.setVelocityX(0);
   grunt.play('grunt-shoot');
-  // T5 game-feel: la bala nace en la boca del arma (GRUNT_MUZZLE), no arriba.
-  // fireEnemyBullet guarda este punto como spawnX/spawnY (BULLET_RANGE mide
-  // distancia recorrida desde ahí). Sin tocar velocidad, rango ni torreta.
-  fireEnemyBullet(
-    scene,
-    group,
-    grunt.x + dir * GRUNT_MUZZLE.dx,
-    grunt.y + GRUNT_MUZZLE.dy,
-    dir,
-    0,
-    ENEMY_BULLET_SPEED,
+  // T8 game-feel: anticipación 200ms — la pose 'grunt-shoot' es el telegraph
+  // (2f a 8fps ≈ 250ms, la bala sale a los 200ms) y LUEGO la bala nace en la
+  // boca del arma (GRUNT_MUZZLE), no antes. Sonido con la bala, nunca con la
+  // anticipación. El timer queda guardado en data para que damageGrunt lo
+  // remueva al morir (matar en telegraph no deja bala fantasma); fireEnemyBullet
+  // guarda este punto como spawnX/spawnY (BULLET_RANGE mide distancia
+  // recorrida desde ahí). Sin tocar velocidad, rango ni torreta.
+  // dir se captura en el `const dir` de arriba: durante shooting updateGrunt
+  // no corre, así que no puede cambiar (el flip de borde de patrulla también
+  // vive en updateGrunt).
+  grunt.setData(
+    'telegraphTimer',
+    scene.time.delayedCall(GRUNT_TELEGRAPH_MS, () => {
+      // Al soltar la bala re-validar: grunt activo/vivo y John vivo; si no,
+      // cancela sin bala ni sonido (el retomar patrulla lo hace al terminar
+      // 'grunt-shoot' el once de abajo).
+      if (!grunt.active || grunt.getData('dead') || !john.active || john.getData('dead')) {
+        return;
+      }
+      grunt.setData('telegraphTimer', null);
+      fireEnemyBullet(
+        scene,
+        group,
+        grunt.x + dir * GRUNT_MUZZLE.dx,
+        grunt.y + GRUNT_MUZZLE.dy,
+        dir,
+        0,
+        ENEMY_BULLET_SPEED,
+      );
+      // T4 sonidos: con la bala (mismo rifle que John, volumen SFX 0.8).
+      scene.sound.play('snd_rifle_shot', { volume: 0.8 });
+    }),
   );
-  // T4 sonidos: disparo grunt con el mismo rifle que John (volumen SFX 0.8).
-  scene.sound.play('snd_rifle_shot', { volume: 0.8 });
   grunt.once('animationcomplete-grunt-shoot', () => {
     if (!grunt.active || grunt.getData('dead')) {
       return;
@@ -222,20 +254,43 @@ export function turretFire(scene, group, turret, john) {
   if (Math.abs(john.x - turret.x) > AGRO_RANGE) {
     return;
   }
-  const frame = turret.getData('aimFrame') ?? 0;
-  const vec = TURRET_FRAME_VECTORS[frame] || { x: -1, y: 0 };
-  const speed = ENEMY_BULLET_SPEED - 10;
-  fireEnemyBullet(
-    scene,
-    group,
-    turret.x + vec.x * 12,
-    turret.y + vec.y * 12,
-    vec.x,
-    vec.y,
-    speed,
+  // T8 game-feel: telegraph — pulso de tint fijo (TURRET_TELEGRAPH_TINT) de
+  // 250ms mientras `aimFrame` (que updateTurret pisa cada update) señala a
+  // John ("hacia aimFrame"); al soltar la bala se limpia. Sonido con la
+  // bala, no acá. El timer queda guardado para que damageTurret lo remueva
+  // al morir.
+  turret.setTint(TURRET_TELEGRAPH_TINT).setTintMode(Phaser.TintModes.FILL);
+  turret.setData(
+    'telegraphTimer',
+    scene.time.delayedCall(TURRET_TELEGRAPH_MS, () => {
+      // Al soltar la bala re-validar: torreta activa/viva y John vivo; si no,
+      // cancela sin bala, sin fx ni sonido.
+      if (!turret.active || turret.getData('dead') || !john.active || john.getData('dead')) {
+        return;
+      }
+      turret.clearTint();
+      turret.setData('telegraphTimer', null);
+      // aimFrame se lee al soltar (updateTurret lo actualizó DURANTE los
+      // 250ms): la bala sale hacia dónde quedó apuntando el cañón.
+      const frame = turret.getData('aimFrame') ?? 0;
+      const vec = TURRET_FRAME_VECTORS[frame] || { x: -1, y: 0 };
+      const speed = ENEMY_BULLET_SPEED - 10;
+      const mx = turret.x + vec.x * 12;
+      const my = turret.y + vec.y * 12;
+      fireEnemyBullet(scene, group, mx, my, vec.x, vec.y, speed);
+      // T7 game-feel: boca de la torreta → ráfaga 'turret' (5) sesgada según
+      // el disparo (vertical queda radial). Fx opcional, nunca rompe gameplay.
+      try {
+        if (typeof scene.emitFx === 'function') {
+          scene.emitFx('turret', mx, my, Math.sign(vec.x));
+        }
+      } catch {
+        // Fx opcional.
+      }
+      // T4 sonidos: con la bala (mismo rifle que John, volumen SFX 0.8).
+      scene.sound.play('snd_rifle_shot', { volume: 0.8 });
+    }),
   );
-  // T4 sonidos: disparo torreta con el mismo rifle que John (volumen SFX 0.8).
-  scene.sound.play('snd_rifle_shot', { volume: 0.8 });
 }
 
 // Devuelve true si el enemigo murió con este impacto.
@@ -249,6 +304,13 @@ export function damageGrunt(scene, grunt) {
   if (timer) {
     timer.remove();
   }
+  // T8 game-feel: matar en anticipación corta el telegraph (sin bala
+  // fantasma). El patrón de patrulla no se retoma: el grunt está muerto.
+  const telegraph = grunt.getData('telegraphTimer');
+  if (telegraph) {
+    telegraph.remove();
+  }
+  grunt.setData('telegraphTimer', null);
   if (grunt.body) {
     grunt.body.enable = false;
     grunt.setVelocity(0, 0);
@@ -277,6 +339,14 @@ export function damageTurret(scene, turret) {
     if (timer) {
       timer.remove();
     }
+    // T8 game-feel: matar durante el telegraph corta el pulso (sin bala
+    // fantasma) y limpia el tint ámbar para no manchar `turret-broke`.
+    const telegraph = turret.getData('telegraphTimer');
+    if (telegraph) {
+      telegraph.remove();
+    }
+    turret.setData('telegraphTimer', null);
+    turret.clearTint();
     // T2 game-feel: rota queda sólida y visible — body ON (staticSprite, sin
     // mover el cuerpo ni refreshBody), 'turret-broke' sin destroy.
     // Score +10 solo al romper (re-golpes retornan arriba por `dead`).

@@ -3,10 +3,10 @@
 ## Contexto
 - Stack: Node 24 + pnpm 12.6.0, Phaser 4.2.1 + Vite + JavaScript (sin TypeScript). Comandos: `pnpm dev` (boot Phaser), `pnpm build` (debe pasar sin errores). Registro de escenas en `src/main.js` (`roundPixels: true`, verificado).
 - Qué existe hoy: `src/scenes/PlayScene.js` (nivel jungla 960x270, pools `bullets` max 12 y `enemyBullets` max 20, `fireJohn` sin cooldown con `refundAmmo` auto al reciclar/impactar, spawn John fijo `x=john.x+dir*14, y=john.y-2` sin distinguir pie/agachado —verificado—, `damageJohn/hitJohn` con knockback por `setVelocity` + tween alpha parpadeo + invuln 1000ms, timers `fireTimer` grunt 2200ms / torreta 2600ms, `cam.startFollow(john, false, 0.08, 0.08)`, colliders solo `john/grunt vs platforms` — las balas atraviesan el escenario, verificado; overlaps bala↔víctima y john↔enemigo usan bodies Arcade, no el sprite visual); `src/enemies.js` (grunt `hp: 1` verificado — muere de 1 tiro, `gruntFire` sin chequeo frontal con spawn `grunt.x+dir*12, grunt.y` —verificado, levemente arriba del arma—, `turretFire` 8 dirs con spawn `vec*12` —correcto, no se toca—, `damageTurret` con `destroy()` al morir, torreta `physics.add.staticSprite` verificado, `BULLET_RANGE=200`, `AGRO_RANGE=200`, `CAM_MARGIN=48`); `src/player.js` (`john-hit` 2f 26x22 ya registrado con `JOHN_HIT_HOLD=250`, `JOHN_SHOOT_HOLD=250`, flag `crouching` + hitboxes `BODY_STAND` {w:18,h:20,ox:4,oy:2} / `BODY_CROUCH` {w:18,h:14,ox:4,oy:12}, salto `JustDown X/SPACE` sin coyote/buffer/variable); `src/scenes/PreloadScene.js` (carga `MVP_ASSETS` + `pause-cursor`, sin `fx/`; sonidos `snd_rifle_shot`, `snd_reload_clip`, `snd_explosion_ground` ya cargados, verificado); `src/scenes/HUDScene.js` (texto `HP/SCORE/AMMO` por registry); `src/scenes/PauseScene.js` (`scene.pause('Play')` congela update + `delayedCall` del reloj de Play, verificado).
-- Medidos solo lectura (PIL/`file`): `SpriteSheets/player/weapon_bullet.png` 64x8 (8f 8x8, hoy solo frame 0 sin anim, copia idéntica en `public/assets/player/`); `SpriteSheets/fx/bullet_impact.png` 100x20; `SpriteSheets/fx/particles_grunt.png`, `particles_turret.png`, `particles_explosion.png`, `particles_dirt.png` 12x2; `SpriteSheets/fx/explosion_smoke.png` 864x72 y `explosion_red.png` 260x22; `SpriteSheets/player/john_hithurt.png` 52x22 (2f 26x22, ya copiado y registrado como `john-hit`); `run_dust.png` 108x18 y `jump_dust.png` 204x10; puntas de arma por medir en T18 (`john_stand_shooting.png` 52x22 de pie, `john_crouch_shoot.png` 52x26 agachado, `grunt_shoot.png` 52x22). Los frames exactos los fija T5 midiendo, no se asumen.
+- Medidos solo lectura (PIL/`file`): `SpriteSheets/player/weapon_bullet.png` 64x8 (8f 8x8, hoy solo frame 0 sin anim, copia idéntica en `public/assets/player/`); `SpriteSheets/fx/bullet_impact.png` 100x20; `SpriteSheets/fx/particles_grunt.png`, `particles_turret.png`, `particles_explosion.png`, `particles_dirt.png` 12x2; `SpriteSheets/fx/explosion_smoke.png` 864x72 y `explosion_red.png` 260x22; `SpriteSheets/player/john_hithurt.png` 52x22 (2f 26x22, ya copiado y registrado como `john-hit`); `run_dust.png` 108x18 y `jump_dust.png` 204x10; puntas de arma por medir en T5 (`john_stand_shooting.png` 52x22 de pie, `john_crouch_shoot.png` 52x26 agachado, `grunt_shoot.png` 52x22). Los frames exactos los fija T6 midiendo, no se asumen.
 - Patrones a seguir: `src/player.js` (`ensureAnims` con `anims.exists` + `generateFrameNumbers`, holds `shootUntil/hitUntil/landUntil`, `play(key, true)` con prioridad hit > shoot > land); `src/enemies.js` (guardas `active/dead`, `fireTimer` que se remueve al morir, `once('animationcomplete-...')`); `src/scenes/PlayScene.js` (pools con `get/enableBody`, `overlap`/`collider` una sola vez en `create`, `registry` hp/score/ammo, `isOnCameraPlusMargin`, `events.once(SHUTDOWN)` que suelta HUD).
 - Decisiones ya tomadas (no re-discutir): siempre Phaser v4, nunca v3; originales en `SpriteSheets/` NUNCA se mueven/renombran/convierten, solo copiar con `cp` a `public/`; sin dependencias nuevas salvo `phaser` + `vite`; tareas pequeñas (cada una ≤3 archivos, una por sesión); reportes en español; flujo aprobado (John 150ms, grunt 2200ms, torreta 2600ms, recarga 900ms al agotar, clip desfasado 120ms, invuln 1000ms sin parpadeo); deuda-combate (cámara+48, agro 200, rango bala 200) y `specs/animaciones-john.md` (holds, muerte animada, hagging, `weapon_bullet_level2`, `player_weapon_break`, `john_dead_soul`) siguen vigentes; esta es la ÚNICA spec de game-feel (absorbe y reemplaza a `specs/game-feel-v2.md`, que se elimina).
-- Decisiones de la extensión (ya resueltas): la recarga inicia al vaciar el cartucho y `snd_reload_clip` suena una sola vez al iniciar (intentos durante `reloading` silenciosos); partículas y fx de boca tienen tarea propia (T6/T7); `particles_*` se cargan como spritesheet si T5 confirma celdas 2x2; texturas con keys distintas entre `PreloadScene` y `PlayScene.preload` (patrón `animaciones-john`) para evitar «Texture key already in use»; expiración por rango lleva puff (T10); invuln legible sin parpadeo vía `HP` rojo sostenido (T13); flash de `hpText` vive en T13, T4 solo publica flags + shake; T3 y T4 tienen exactamente 3 archivos cada una, no se parten.
+- Decisiones de la extensión (ya resueltas): la recarga inicia al vaciar el cartucho y `snd_reload_clip` suena una sola vez al iniciar (intentos durante `reloading` silenciosos); partículas y fx de boca tienen tarea propia (T7/T8); `particles_*` se cargan como spritesheet si T6 confirma celdas 2x2; texturas con keys distintas entre `PreloadScene` y `PlayScene.preload` (patrón `animaciones-john`) para evitar «Texture key already in use»; expiración por rango lleva puff (T11); invuln legible sin parpadeo vía `HP` rojo sostenido (T14); flash de `hpText` vive en T14, T4 solo publica flags + shake; T3 y T4 tienen exactamente 3 archivos cada una, no se parten.
 - Decisión profesional de daño (pedido 2026-10-16): el daño a John ocurre SOLO si la bala toca su collider (body Arcade: `BODY_STAND` de pie, `BODY_CROUCH` agachado), nunca por contacto con el sprite visual. Agachado ya esquiva tiros altos de forma natural por hitbox baja; NO se añade bypass por postura ni se reescala ningún sprite en esta spec.
 
 ## Objetivo
@@ -69,7 +69,7 @@ Diagrama de FLUJO (decisiones y ramas — acá viven los casos borde):
 Matriz evento → feedback (solo assets/sonidos existentes; «—» = nada deliberado):
 | Evento | Visual | Audio (existente) | Cámara | HUD (solo texto) |
 |---|---|---|---|---|
-| John dispara | boca en punto T18 (impact f0 escala 0.5, 50ms) + `bullet-fly` | `snd_rifle_shot` ±5% rate | — | `AMMO` baja |
+| John dispara | boca en punto T5 (impact f0 escala 0.5, 50ms) + `bullet-fly` | `snd_rifle_shot` ±5% rate | — | `AMMO` baja |
 | Último tiro | igual + inicia recarga | `snd_reload_clip` (1 vez, desfasado 120ms del último disparo) | — | `AMMO:RELOAD` |
 | Bala John → enemigo vivo | `bullet-impact` + partículas + tint 120ms + hit-pause 60ms | — | — | — |
 | Torreta HP 0 | blanco 80ms → `explosion_red` + `particles_explosion` → `explosion_smoke` → `turret-broke` | `snd_explosion_ground` | shake 150ms/0.003 | `SCORE` pop (+10) |
@@ -94,7 +94,7 @@ Prioridades: shake `hit` (forzado) > `explosion` > resto; si se supera `FX_MAX_S
 - Emitters se crean UNA vez en `create()` (`emitting:false`) y se reutilizan con `explode(n, x, y)`; nunca crear emitters por impacto. Fx sprites autodestruibles con `once('animationcomplete-…')`, tope `FX_MAX_SPRITES` y guarda `anims.exists`: si falta anim o se alcanza el tope, se omite el fx sin excepción.
 - Un único helper de shake (`shakeCam(kind)` en `PlayScene.js`) y un único helper de sonido (`playSfx`); hit-pause solo del sprite impactado (`anims.pause()/resume()`), nunca hit-stop global vía `physics.world`.
 - Confirmar en `node_modules/phaser` (v4.2.1) la firma exacta antes de usar `add.particles`/`explode`, `cameras.main.shake(…, force)`, tint y `setFollowOffset`.
-- Sin colisiones nuevas que cambien gameplay sin aprobación (T11). `props/` sigue intacto.
+- Sin colisiones nuevas que cambien gameplay sin aprobación (T12). `props/` sigue intacto.
 - Archivos permitidos en toda la spec: `src/player.js`, `src/enemies.js`, `src/scenes/PlayScene.js`, `src/scenes/PreloadScene.js` + `src/scenes/HUDScene.js` (solo T13).
 
 ## Fuera de alcance
@@ -108,10 +108,10 @@ Prioridades: shake `hit` (forzado) > `explosion` > resto; si se supera `FX_MAX_S
 
 ## Tareas
 ### Orden de ejecución
-`T1 → T2 → T3 → T4 → T18 → T5 → T6 → T10 → T7 → T8 → T9 → T11 → T12 → T13 → T15 → T14 → T16 → T17`. Dependencias: T18 no requiere fx (solo medir PNGs); T6 requiere T5 y T3; T7/T8/T9/T10/T11 usan el punto de spawn de T18; T13 requiere flags de T1/T4; T16 y T17 al final. Una tarea por sesión; cada una debe pasar `pnpm build` antes de seguir.
+`T1 → T2 → T3 → T4 → T5 → T6 → T7 → T11 → T8 → T9 → T10 → T12 → T13 → T14 → T16 → T15 → T17 → T18`. Dependencias: T5 no requiere fx (solo medir PNGs); T7 requiere T6 y T3; T8/T9/T10/T11/T12 usan el punto de spawn de T5; T14 requiere flags de T1/T4; T17 y T18 al final. Una tarea por sesión; cada una debe pasar `pnpm build` antes de seguir.
 
 ### T1: Cooldowns + cartucho con recarga al agotar
-- **Hacer:** En `src/player.js` exportar `JOHN_FIRE_DELAY=150` y `RELOAD_DELAY=900`. En `src/scenes/PlayScene.js` (`fireJohn`) orden estricto: (1) si `reloading` o `now - lastShotAt < JOHN_FIRE_DELAY` ignora (intentos en `reloading` silenciosos, resto sin sonido ni bala, sin tocar `lastShotAt`); (2) `pool.get()` y si es `null` aborta sin gastar ammo ni cooldown; (3) gasta 1 ammo, fija `lastShotAt=now`, spawnea con `bullet-fly` (T3) en el punto de T18. ELIMINAR `refundAmmo` auto (impactos y `recycleBullets` del grupo John solo `killBullet`). Disparo en ráfaga: en `update()` mientras `fireKey.isDown` o puntero presionado (izq. con `isDown` / der. con `rightButtonDown()`) se intenta `fireJohn()` cada frame; el cooldown regula la cadencia (una pulsación suelta es el caso particular de un intento). Para el clic derecho, en `create()` llamar `this.input.mouse.disableContextMenu()` (existe en Phaser 4.2.1, verificado en `node_modules/phaser/types/phaser.d.ts`; su propósito declarado es habilitar el botón derecho sin que el menú estorbe). Al vaciar (no al reintentar) pone `reloading=true`, publica `registry.reloading`, suena `snd_reload_clip` una vez con desfase `RELOAD_SFX_DELAY=120` respecto al último disparo (vía `delayedCall` del reloj de Play, se guarda el handle; T16 lo cancela en restart) para no solaparse con `snd_rifle_shot`, y con `time.delayedCall(RELOAD_DELAY)` resetea `ammo=BULLET_MAX(12)` + `reloading=false`. Mantener `GRUNT_FIRE_DELAY=2200` / `TURRET_FIRE_DELAY=2600`. Comentar que cartucho == pool max.
+- **Hacer:** En `src/player.js` exportar `JOHN_FIRE_DELAY=150` y `RELOAD_DELAY=900`. En `src/scenes/PlayScene.js` (`fireJohn`) orden estricto: (1) si `reloading` o `now - lastShotAt < JOHN_FIRE_DELAY` ignora (intentos en `reloading` silenciosos, resto sin sonido ni bala, sin tocar `lastShotAt`); (2) `pool.get()` y si es `null` aborta sin gastar ammo ni cooldown; (3) gasta 1 ammo, fija `lastShotAt=now`, spawnea con `bullet-fly` (T3) en el punto de T5. ELIMINAR `refundAmmo` auto (impactos y `recycleBullets` del grupo John solo `killBullet`). Disparo en ráfaga: en `update()` mientras `fireKey.isDown` o puntero presionado (izq. con `isDown` / der. con `rightButtonDown()`) se intenta `fireJohn()` cada frame; el cooldown regula la cadencia (una pulsación suelta es el caso particular de un intento). Para el clic derecho, en `create()` llamar `this.input.mouse.disableContextMenu()` (existe en Phaser 4.2.1, verificado en `node_modules/phaser/types/phaser.d.ts`; su propósito declarado es habilitar el botón derecho sin que el menú estorbe). Al vaciar (no al reintentar) pone `reloading=true`, publica `registry.reloading`, suena `snd_reload_clip` una vez con desfase `RELOAD_SFX_DELAY=120` respecto al último disparo (vía `delayedCall` del reloj de Play, se guarda el handle; T17 lo cancela en restart) para no solaparse con `snd_rifle_shot`, y con `time.delayedCall(RELOAD_DELAY)` resetea `ammo=BULLET_MAX(12)` + `reloading=false`. Mantener `GRUNT_FIRE_DELAY=2200` / `TURRET_FIRE_DELAY=2600`. Comentar que cartucho == pool max.
 - **Archivos:** `src/player.js`, `src/scenes/PlayScene.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: mantener C (o clic) dispara en ráfaga ~6/s; vaciar 12 bloquea, un solo clip desfasado y distinguible del último disparo, a ~0.9s vuelve a `AMMO:12`; pulsar C 20 veces en recarga no repite sonido ni duplica recarga; balas expiradas por rango no devuelven ammo; clic derecho dispara sin abrir menú contextual.
 
@@ -121,92 +121,92 @@ Prioridades: shake `hit` (forzado) > `explosion` > resto; si se supera `FX_MAX_S
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: detrás del grunt a <200px nunca dispara; 2 tiros dejan `turret-broke` sólida y pisable sin HP perdido ni más disparos; 5 tiros extra a la rota no dan score ni repiten anim.
 
 ### T3: Bala animada + impacto con fx
-- **Hacer:** Copiar con `cp` a `public/assets/fx/`: `bullet_impact.png`, `particles_grunt.png`, `particles_turret.png`, `particles_explosion.png` (solo esos 4). En `PreloadScene.js` entradas aditivas con keys de gate distintas a las de Play (p. ej. `fx-bullet-impact`), nunca la misma key en dos loaders. En `PlayScene.js` (`preload`) cargar `bullet-fly-anim` (`weapon_bullet.png`, 8x8 → 8f) y `bullet-impact-anim` (frame de T5); en `create()` registrar `bullet-fly` (frameRate 12, repeat 0 — un pase sincronizado al vuelo de John, 200px a 340px/s ≈ 588ms), `bullet-fly-enemy` (frameRate 6, repeat 0 — un pase sincronizado al vuelo enemigo, 200px a 160/150px/s ≈ 1.25s) y `bullet-impact` (frameRate 16, repeat 0) con guarda `anims.exists` (medido: los 8 frames de `weapon_bullet.png` decaen de 37px opacos a frame 7 vacío, por eso un solo pase por vuelo y nunca loop). En `fireJohn`/`fireEnemyBullet` resetear `rotation/tint/alpha/scale`/frame, `flipX` según el signo horizontal del disparo (`dir < 0` / `dirX < 0`: el frame 0 lleva la cabeza a la derecha) y `play('bullet-fly'/'bullet-fly-enemy')` sin `ignoreIfPlaying` (el pool reusa balas con la anim congelada en el frame de muerte; solo el restart forzado garantiza frame 0 al spawnear); en `onJohnBulletVsGrunt/Turret` y `onEnemyBulletVsJohn` spawnear impacto en el centro del body con `depth=FX_DEPTH` y `once(animationcomplete → destroy)` antes de `killBullet`. Punto de spawn exacto lo fija T18; acá solo animar. Sin sonidos nuevos. Fix verificado post-implementación: el `ignoreIfPlaying` en balas de pool congelaba la anim en el frame de muerte (casi siempre el 7, vacío) y las reusadas volaban invisibles — por eso restart forzado en `fireJohn` y `fireEnemyBullet` (`enemyBullets` también es pool con reuse). Auditado: anims de John/grunt/torreta e impactos `bullet-impact` son de instancia única (se crean una vez o se destruyen al terminar), así que el `play(key, true)` ahí es correcto y no les aplica este bug. Deuda explícita: diagonales y tiro hacia arriba quedan pendientes — las balas diagonales/verticales de torreta hoy solo espejan por signo horizontal, la orientación real (`rotation=atan2`) la pone T10; John y grunt no disparan en vertical/diagonal hasta el apuntado 8-dir (mediano plazo en `specs/animaciones-john.md`).
+- **Hacer:** Copiar con `cp` a `public/assets/fx/`: `bullet_impact.png`, `particles_grunt.png`, `particles_turret.png`, `particles_explosion.png` (solo esos 4). En `PreloadScene.js` entradas aditivas con keys de gate distintas a las de Play (p. ej. `fx-bullet-impact`), nunca la misma key en dos loaders. En `PlayScene.js` (`preload`) cargar `bullet-fly-anim` (`weapon_bullet.png`, 8x8 → 8f) y `bullet-impact-anim` (frame de T6); en `create()` registrar `bullet-fly` (frameRate 12, repeat 0 — un pase sincronizado al vuelo de John, 200px a 340px/s ≈ 588ms), `bullet-fly-enemy` (frameRate 6, repeat 0 — un pase sincronizado al vuelo enemigo, 200px a 160/150px/s ≈ 1.25s) y `bullet-impact` (frameRate 16, repeat 0) con guarda `anims.exists` (medido: los 8 frames de `weapon_bullet.png` decaen de 37px opacos a frame 7 vacío, por eso un solo pase por vuelo y nunca loop). En `fireJohn`/`fireEnemyBullet` resetear `rotation/tint/alpha/scale`/frame, `flipX` según el signo horizontal del disparo (`dir < 0` / `dirX < 0`: el frame 0 lleva la cabeza a la derecha) y `play('bullet-fly'/'bullet-fly-enemy')` sin `ignoreIfPlaying` (el pool reusa balas con la anim congelada en el frame de muerte; solo el restart forzado garantiza frame 0 al spawnear); en `onJohnBulletVsGrunt/Turret` y `onEnemyBulletVsJohn` spawnear impacto en el centro del body con `depth=FX_DEPTH` y `once(animationcomplete → destroy)` antes de `killBullet`. Punto de spawn exacto lo fija T5; acá solo animar. Sin sonidos nuevos. Fix verificado post-implementación: el `ignoreIfPlaying` en balas de pool congelaba la anim en el frame de muerte (casi siempre el 7, vacío) y las reusadas volaban invisibles — por eso restart forzado en `fireJohn` y `fireEnemyBullet` (`enemyBullets` también es pool con reuse). Auditado: anims de John/grunt/torreta e impactos `bullet-impact` son de instancia única (se crean una vez o se destruyen al terminar), así que el `play(key, true)` ahí es correcto y no les aplica este bug. Deuda explícita: diagonales y tiro hacia arriba quedan pendientes — las balas diagonales/verticales de torreta hoy solo espejan por signo horizontal, la orientación real (`rotation=atan2`) la pone T10; John y grunt no disparan en vertical/diagonal hasta el apuntado 8-dir (mediano plazo en `specs/animaciones-john.md`).
 - **Archivos:** `src/scenes/PreloadScene.js`, `src/scenes/PlayScene.js`, `src/enemies.js` (+ copias en `public/assets/fx/`)
 - **Verify:** `pnpm build` pasa sin 404 ni «Texture key already in use» + manual `pnpm dev`: balas animadas, impactos autodestruidos; `git status --stat` no toca `SpriteSheets/`.
 
 ### T4: Daño John solo por animación + dust
-- **Hacer:** En `src/scenes/PlayScene.js` (`damageJohn`/`hitJohn`): QUITAR `setVelocity` de knockback y el tween alpha (`tweens.add alpha` + `killTweensOf` de ese tween); mantener `invuln=true` + `delayedCall(1000)` que lo limpia, `setAlpha(1)` fijo, `hitUntil=now+JOHN_HIT_HOLD` + `play('john-hit', true)`; publicar `registry.invuln` y `registry.hitAt`. NO añadir bypass por `crouching`: el overlap ya es por bodies. Constantes `HIT_SHAKE_MS=120` / `HIT_SHAKE_INTENSITY=0.004` y `cameras.main.shake(...)` directo (T15 lo centraliza). Copiar `run_dust.png` y `jump_dust.png` a `public/assets/fx/`, carga aditiva en `PreloadScene`, frames de T5, spawnear solo en flanco real aire→suelo y cadencia de pasos ≥250ms (una instancia por flanco), anclado a pies según `BODY_STAND`, con `once(animationcomplete → destroy)`. Sin cambios de hitbox/HP.
+- **Hacer:** En `src/scenes/PlayScene.js` (`damageJohn`/`hitJohn`): QUITAR `setVelocity` de knockback y el tween alpha (`tweens.add alpha` + `killTweensOf` de ese tween); mantener `invuln=true` + `delayedCall(1000)` que lo limpia, `setAlpha(1)` fijo, `hitUntil=now+JOHN_HIT_HOLD` + `play('john-hit', true)`; publicar `registry.invuln` y `registry.hitAt`. NO añadir bypass por `crouching`: el overlap ya es por bodies. Constantes `HIT_SHAKE_MS=120` / `HIT_SHAKE_INTENSITY=0.004` y `cameras.main.shake(...)` directo (T16 lo centraliza). Copiar `run_dust.png` y `jump_dust.png` a `public/assets/fx/`, carga aditiva en `PreloadScene`, frames de T6, spawnear solo en flanco real aire→suelo y cadencia de pasos ≥250ms (una instancia por flanco), anclado a pies según `BODY_STAND`, con `once(animationcomplete → destroy)`. Sin cambios de hitbox/HP.
 - **Archivos:** `src/scenes/PlayScene.js`, `src/player.js` (+ `src/scenes/PreloadScene.js` solo entradas y copias)
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: golpe en salto conserva trayectoria, solo `john-hit` 2f + shake, sin parpadeo; segunda bala <1s no daña; dust en correr/aterrizar autodestruido; muerte y foso iguales.
-- **Fix verificado post-implementación:** dust con origen abajo-centro + pies desde `body.bottom` (deriva de `BODY_STAND`; el centro en `y+10` hundía ~9px el run-dust bajo el piso), `flipX` por facing con 1px detrás del pie; frames provisorios 6f (run 18x18, jump 34x10) pendientes de confirmación en T5.
+- **Fix verificado post-implementación:** dust con origen abajo-centro + pies desde `body.bottom` (deriva de `BODY_STAND`; el centro en `y+10` hundía ~9px el run-dust bajo el piso), `flipX` por facing con 1px detrás del pie; frames provisorios 6f (run 18x18, jump 34x10) pendientes de confirmación en T6.
 
-### T18: Orígenes de bala en la boca del arma (John pie/agachado + grunt)
-- **Hacer:** Medir solo lectura la punta del cañón en `john_stand_shooting.png` (52x22), `john_crouch_shoot.png` (52x26) y `grunt_shoot.png` (52x22): offset en px desde el centro del body hasta la boca, documentado en comentario. Exportar en `src/player.js` `JOHN_MUZZLE_STAND={dx,dy}` y `JOHN_MUZZLE_CROUCH={dx,dy}`, y en `src/enemies.js` `GRUNT_MUZZLE={dx,dy}` (torreta no se toca: `vec*12` queda). En `PlayScene.js` (`fireJohn`) elegir offset por `getData('crouching')` y aplicar `dir` de `flipX` al `dx` (`x=john.x+dir*dx, y=john.y+dy`); quitar el fijo `+14/-2`. En `src/enemies.js` (`gruntFire`) spawnear en `grunt.x+dir*dx, grunt.y+dy` y guardar ese punto como `spawnX/spawnY` (el `BULLET_RANGE` ya mide distancia recorrida). El fx de boca de T7 usa exactamente ese mismo punto. Sin tocar velocidad, rango, hitboxes ni torreta.
+### T5: Orígenes de bala en la boca del arma (John pie/agachado + grunt)
+- **Hacer:** Medir solo lectura la punta del cañón en `john_stand_shooting.png` (52x22), `john_crouch_shoot.png` (52x26) y `grunt_shoot.png` (52x22): offset en px desde el centro del body hasta la boca, documentado en comentario. Exportar en `src/player.js` `JOHN_MUZZLE_STAND={dx,dy}` y `JOHN_MUZZLE_CROUCH={dx,dy}`, y en `src/enemies.js` `GRUNT_MUZZLE={dx,dy}` (torreta no se toca: `vec*12` queda). En `PlayScene.js` (`fireJohn`) elegir offset por `getData('crouching')` y aplicar `dir` de `flipX` al `dx` (`x=john.x+dir*dx, y=john.y+dy`); quitar el fijo `+14/-2`. En `src/enemies.js` (`gruntFire`) spawnear en `grunt.x+dir*dx, grunt.y+dy` y guardar ese punto como `spawnX/spawnY` (el `BULLET_RANGE` ya mide distancia recorrida). El fx de boca de T8 usa exactamente ese mismo punto. Sin tocar velocidad, rango, hitboxes ni torreta.
 - **Archivos:** `src/player.js`, `src/scenes/PlayScene.js`, `src/enemies.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev` con pausa de frames: parado la bala nace pegada a la boca del arma (sin gap flotante); agachado nace abajo a la altura del arma (no al nivel del pecho parado); grunt nace en su arma (no arriba); screenshot comparativo pie vs agachado.
 
-### T5: Medición y copia de fx pendientes (sin lógica)
+### T6: Medición y copia de fx pendientes (sin lógica)
 - **Hacer:** Medir con PIL (solo lectura) y documentar en comentario de `PreloadScene.js` y en la tabla los frames REALES de `explosion_smoke.png`, `explosion_red.png`, `run_dust.png`, `jump_dust.png`, `bullet_impact.png` y `particles_*.png`. Criterio: división válida si cada celda tiene ≥1 píxel opaco y ninguna frontera corta un componente conectado. Copiar con `cp` a `public/assets/fx/`: `explosion_smoke.png`, `explosion_red.png`, `particles_dirt.png` (más `run_dust`/`jump_dust` si T4 no los copió). `shadow_char` NO se copia. Cargar aditivo como spritesheet con el frame medido. No registrar anims ni usar nada todavía.
 - **Archivos:** `src/scenes/PreloadScene.js` (+ copias en `public/assets/fx/`)
 - **Verify:** `pnpm build` pasa sin 404; tabla completada; `git status --stat` solo `PreloadScene.js` y `public/assets/fx/`; `SpriteSheets/` intacto.
 - **Tabla a completar:**
   | Sheet | Tamaño | Frame medido | Nº frames | Notas |
   |---|---|---|---|---|
-  | bullet_impact | 100x20 | _pendiente_ | _pendiente_ | |
-  | particles_grunt / turret / explosion / dirt | 12x2 | _pendiente_ | _pendiente_ | ¿6 celdas 2x2? |
-  | explosion_smoke | 864x72 | _pendiente_ | _pendiente_ | |
-  | explosion_red | 260x22 | _pendiente_ | _pendiente_ | |
-  | run_dust | 108x18 | _pendiente_ | _pendiente_ | |
-  | jump_dust | 204x10 | _pendiente_ | _pendiente_ | |
+  | bullet_impact | 100x20 | 20x20 | 5 | fronteras 20/40 limpias; aro f3 roza 1px x=60, chispas f4 x=80 — confirma provisional T3 |
+  | particles_grunt / turret / explosion / dirt | 12x2 | 2x2 | 6 | CONFIRMADO: cada celda un color sólido; fila 1 duplica la 0; turret f6 multicolor |
+  | explosion_smoke | 864x72 | 72x72 | 12 (f12 vacío) | disipación total al final; todas las fronteras en columnas de ceros; alternativa sin vacías: 6f 144x72 |
+  | explosion_red | 260x22 | 26x22 | 10 | fronteras limpias; f10 = 1px residuo |
+  | run_dust | 108x18 | 18x18 | 6 (f6 vacío) | puff f0-4 + fin; confirma provisional T4 |
+  | jump_dust | 204x10 | 34x10 | 6 (f6 vacío) | puff f0-4 + fin; confirma provisional T4 |
 
-### T6: Emitters de partículas reutilizables
-- **Hacer:** En `PlayScene.js` `create()` crear UNA vez 4 emitters (`grunt`, `turret`, `explosion`, `dirt`) con `emitting:false`, spritesheet 2x2 de T5 con frame aleatorio. Presets en `FX_PRESETS` (cantidad, `speed` min/max, `lifespan` 250–450ms, `alpha` start→0, `scale`, `gravityY` de partícula). Helper `emitFx(kind, x, y, dir)` con `explode(n, x, y)` sesgando ángulo hacia afuera. Conectar: John golpeado → `grunt` (6), torreta viva golpeada → `turret` (5), HP 0 → `explosion` (14). Tope `FX_MAX_PARTICLES`, `depth=FX_DEPTH`.
+### T7: Emitters de partículas reutilizables
+- **Hacer:** En `PlayScene.js` `create()` crear UNA vez 4 emitters (`grunt`, `turret`, `explosion`, `dirt`) con `emitting:false`, spritesheet 2x2 de T6 con frame aleatorio. Presets en `FX_PRESETS` (cantidad, `speed` min/max, `lifespan` 250–450ms, `alpha` start→0, `scale`, `gravityY` de partícula). Helper `emitFx(kind, x, y, dir)` con `explode(n, x, y)` sesgando ángulo hacia afuera. Conectar: John golpeado → `grunt` (6), torreta viva golpeada → `turret` (5), HP 0 → `explosion` (14). Tope `FX_MAX_PARTICLES`, `depth=FX_DEPTH`.
 - **Archivos:** `src/scenes/PlayScene.js`, `src/scenes/PreloadScene.js`, `src/enemies.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: ráfagas <0.5s; 30 impactos no suben `children.list.length`.
 
-### T7: Fx de boca + anticipación de disparo
-- **Hacer:** John: boca con frame 0 de impacto escala 0.5 durante `MUZZLE_FLASH_MS=50` en el punto de spawn de T18 (respeta pie/agachado), sin tocar `JOHN_SHOOT_HOLD`. Grunt: al pasar gates reproduce `grunt-shoot` y la bala sale tras `GRUNT_TELEGRAPH_MS=200` desde `GRUNT_MUZZLE`. Torreta viva: tint fijo un pulso `TURRET_TELEGRAPH_MS=250` hacia `aimFrame`, bala al final con `emitFx('turret')`. Al soltar la bala re-validar `active && !dead` y John vivo, si no cancela sin bala ni sonido; timers de anticipación guardados para removerlos al morir. Sonido con la bala, no con la anticipación.
+### T8: Fx de boca + anticipación de disparo
+- **Hacer:** John: boca con frame 0 de impacto escala 0.5 durante `MUZZLE_FLASH_MS=50` en el punto de spawn de T5 (respeta pie/agachado), sin tocar `JOHN_SHOOT_HOLD`. Grunt: al pasar gates reproduce `grunt-shoot` y la bala sale tras `GRUNT_TELEGRAPH_MS=200` desde `GRUNT_MUZZLE`. Torreta viva: tint fijo un pulso `TURRET_TELEGRAPH_MS=250` hacia `aimFrame`, bala al final con `emitFx('turret')`. Al soltar la bala re-validar `active && !dead` y John vivo, si no cancela sin bala ni sonido; timers de anticipación guardados para removerlos al morir. Sonido con la bala, no con la anticipación.
 - **Archivos:** `src/enemies.js`, `src/scenes/PlayScene.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: anticipación visible; intervalos grunt 2200±50ms y torreta 2600±50ms; matar en anticipación no deja bala fantasma.
 
-### T8: Feedback de impacto en enemigos
+### T9: Feedback de impacto en enemigos
 - **Hacer:** En enemigo vivo golpeado por John: tint `ENEMY_HIT_TINT_MS=120` (reinicia timer, sin acumular; `clearTint` en callback), hit-pause `HIT_PAUSE_MS=60` con `anims.pause()` + `delayedCall(resume)` sin reanudar si murió, y stagger grunt `GRUNT_STAGGER_MS=150` con `setVelocityX(0)` restaurando velocidad/`dir` (sin cambiar `dir`). Nota: grunt tiene HP 1, así que en él esto solo se ve si sobrevive el golpe; el caso real es torreta viva. Texto `+10` efímero (sin body, tween alpha + subida) al romper torreta. Todo con guardas `active/dead`.
 - **Archivos:** `src/enemies.js`, `src/scenes/PlayScene.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: impacto en torreta viva destella + micro-pausa; grunt en patrulla retoma misma dirección; ráfaga no deja tint pegado.
 
-### T9: Rotura de torreta con explosión
-- **Hacer:** Secuencia ≤600ms a HP 0 (`dead=true` antes de fx): (1) blanco 80ms + hit-pause, (2) `explosion_red` centrada + `emitFx('explosion')` + `snd_explosion_ground` + `shakeCam('explosion')` (150ms/0.003) e inicia `turret-broke`, (3) `explosion_smoke` encima autodestruible. Registrar `explosion-red`/`explosion-smoke` (`repeat 0`, frames T5). Un solo +10.
+### T10: Rotura de torreta con explosión
+- **Hacer:** Secuencia ≤600ms a HP 0 (`dead=true` antes de fx): (1) blanco 80ms + hit-pause, (2) `explosion_red` centrada + `emitFx('explosion')` + `snd_explosion_ground` + `shakeCam('explosion')` (150ms/0.003) e inicia `turret-broke`, (3) `explosion_smoke` encima autodestruible. Registrar `explosion-red`/`explosion-smoke` (`repeat 0`, frames T6). Un solo +10.
 - **Archivos:** `src/enemies.js`, `src/scenes/PlayScene.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: explosión completa y limpia; rota sólida y visible; score +10 exacto; re-golpear no repite fx.
 
-### T10: Legibilidad de balas y fin de vida
-- **Hacer:** Tint enemigas `ENEMY_BULLET_TINT` vs John sin tint; `rotation=Math.atan2(vy,vx)` en 8 dirs de torreta y `flipX` en John/grunt, reseteado en cada spawn (origen T18 intacto); al expirar por rango puff de `bullet-impact` escala 0.5 en última posición, sin refund. Sin cambiar velocidad, rango ni hitbox.
+### T11: Legibilidad de balas y fin de vida
+- **Hacer:** Tint enemigas `ENEMY_BULLET_TINT` vs John sin tint; `rotation=Math.atan2(vy,vx)` en 8 dirs de torreta y `flipX` en John/grunt, reseteado en cada spawn (origen T5 intacto); al expirar por rango puff de `bullet-impact` escala 0.5 en última posición, sin refund. Sin cambiar velocidad, rango ni hitbox.
 - **Archivos:** `src/scenes/PlayScene.js`, `src/enemies.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: enemiga distinguible, diagonales orientadas, 30 balas sin heredar tint/rotación, expiradas con puff sin refund.
 
-### T11: Impacto de balas contra el entorno
-- **Hacer:** Verificado: hoy NO hay collider/overlap balas↔plataformas, las balas atraviesan. Por eso NO se añade colisión nueva en esta tarea (cambiaría reglas): solo fx pasivo con `bullet-impact` + `emitFx('dirt')` en el punto de expiración orientado opuesto a la trayectoria (apoya a T10). Si a futuro se quiere colisión real, pedir decisión aparte. Cualquier overlap nuevo iría una sola vez en `create()`. Sin sonido nuevo.
+### T12: Impacto de balas contra el entorno
+- **Hacer:** Verificado: hoy NO hay collider/overlap balas↔plataformas, las balas atraviesan. Por eso NO se añade colisión nueva en esta tarea (cambiaría reglas): solo fx pasivo con `bullet-impact` + `emitFx('dirt')` en el punto de expiración orientado opuesto a la trayectoria (apoya a T11). Si a futuro se quiere colisión real, pedir decisión aparte. Cualquier overlap nuevo iría una sola vez en `create()`. Sin sonido nuevo.
 - **Archivos:** `src/scenes/PlayScene.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: disparar al suelo/pared deja chispa + polvo coherente, sin refund y sin alterar recorridos.
 
-### T12: Audio con keys existentes
+### T13: Audio con keys existentes
 - **Hacer:** Helper `playSfx(key, opts)` en `PlayScene.js` que reemplaza `sound.play` directos. Solo keys cargadas (`snd_rifle_shot`, `snd_reload_clip`, `snd_explosion_ground`); sin sonidos nuevos. `SFX_RATE_JITTER=0.05` en John, `ENEMY_SHOT_RATE=0.85` + volumen por distancia `clamp(1 − dist/AGRO_RANGE·0.6, 0.35, 1)` en enemigos, anti-spam `SFX_MIN_GAP_MS=40` por key y tope de voces. Anticipación sin sonido, suena con la bala.
 - **Archivos:** `src/scenes/PlayScene.js`, `src/enemies.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: John no suena idéntico, lejano más bajo, doble explosión no satura; sin assets nuevos de audio.
 
-### T13: HUD de texto expresivo (sin HUD gráfico)
+### T14: HUD de texto expresivo (sin HUD gráfico)
 - **Hacer:** En `HUDScene.js` sobre textos existentes (patrón registry): `AMMO` → `AMMO:RELOAD` con `registry.reloading`, vuelve a `AMMO:12`; ámbar con `ammo ≤ LOW_AMMO_THRESHOLD=3`, rojo en 0. `HP` flash blanco→rojo `HP_FLASH_MS=120` al golpe y rojo sostenido en invuln 1000ms. `SCORE` pop escala 1→1.15→1 en `SCORE_POP_MS=140`. Tweens con `killTweensOf` antes de reiniciar. En `PlayScene.js` solo publicar flags (`reloading`, `invuln`, `hitAt`) si T1/T4 no lo hicieron.
 - **Archivos:** `src/scenes/HUDScene.js`, `src/scenes/PlayScene.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: `AMMO:RELOAD` legible, HP destella y queda rojo ~1s, score con pop, sin gráficos nuevos.
 
-### T14: Movimiento ágil (coyote, buffer, salto variable)
+### T15: Movimiento ágil (coyote, buffer, salto variable)
 - **Hacer:** Sobre el salto actual (`JustDown X/SPACE` + `onGround`, verificado en `src/player.js`): `COYOTE_MS=90` (solo tras dejar plataforma, no tras saltar), `JUMP_BUFFER_MS=110` (salto en aire ≤110ms antes de aterrizar se ejecuta), salto variable con `JUMP_CUT=0.5` una sola vez al soltar en ascenso. Sin tocar gravedad, hitboxes, velocidad máxima ni prioridad hit > shoot > land. Coyote no cuenta como aire para dust de T4.
 - **Archivos:** `src/player.js` (+ `src/scenes/PlayScene.js` solo si el input se lee allí)
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: salto ~100ms tras borde funciona, buffer antes de aterrizar rebota, tap corto < mantener; foso/muerte/respawn iguales.
 
-### T15: Cámara viva (lookahead, follow suave, shake centralizado)
-- **Hacer:** En `PlayScene.js`: lookahead `setFollowOffset` hacia facing, máx `CAM_LOOKAHEAD=24` (< `CAM_MARGIN=48`), interpolado `CAM_LOOKAHEAD_LERP`; base follow `0.08` verificada (`CAM_FOLLOW_LERP`) + deadzone horizontal pequeña; no tocar bounds. Helper `shakeCam(kind)` con `{ hit: {120, 0.004, force:true}, explosion: {150, 0.003} }` que sustituye literales de T4/T9. `roundPixels: true` ya verificado en `src/main.js`, no se modifica.
+### T16: Cámara viva (lookahead, follow suave, shake centralizado)
+- **Hacer:** En `PlayScene.js`: lookahead `setFollowOffset` hacia facing, máx `CAM_LOOKAHEAD=24` (< `CAM_MARGIN=48`), interpolado `CAM_LOOKAHEAD_LERP`; base follow `0.08` verificada (`CAM_FOLLOW_LERP`) + deadzone horizontal pequeña; no tocar bounds. Helper `shakeCam(kind)` con `{ hit: {120, 0.004, force:true}, explosion: {150, 0.003} }` que sustituye literales de T4/T10. `roundPixels: true` ya verificado en `src/main.js`, no se modifica.
 - **Archivos:** `src/scenes/PlayScene.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: cámara se adelanta sin tirones, enemigos siguen gateados por cámara+margen y ≤200px, daño siempre muestra su shake.
 
-### T16: Robustez de estado y rendimiento
+### T17: Robustez de estado y rendimiento
 - **Hacer:** En respawn/restart resetear `ammo, reloading, lastShotAt, invuln` y cancelar `delayedCall` guardados (recarga, invuln, tint, anticipación) y tweens HUD huérfanos; `events.once('shutdown')` destruye emitters/fx y quita listeners; `spawnFx` devuelve `null` con `FX_MAX_SPRITES=24`; todo diferido revalida `active/dead`; recarga/anticipación usan reloj de Play (se congelan con pausa, verificado); contador dev-only (`import.meta.env.DEV`) de fx/balas/ammo. Sin dependencias nuevas.
 - **Archivos:** `src/scenes/PlayScene.js`, `src/enemies.js`, `src/player.js`
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: morir/reiniciar ×5 deja `AMMO:12`, `reloading=false`, 0 fx y sin warnings; pausar en recarga completa solo el resto; 10 impactos ~60fps.
 
-### T17: Pasada final de tuning (solo constantes)
-- **Hacer:** Playtest ~10min; ajustar SOLO valores del registro (sin lógica): ningún fx tapa balas, shake no marea, anticipación legible y justa, salto no flotante, muzzle T18 alineado en ambas posturas. Completar «Valor final».
+### T18: Pasada final de tuning (solo constantes)
+- **Hacer:** Playtest ~10min; ajustar SOLO valores del registro (sin lógica): ningún fx tapa balas, shake no marea, anticipación legible y justa, salto no flotante, muzzle T5 alineado en ambas posturas. Completar «Valor final».
 - **Archivos:** constantes en `src/player.js`, `src/enemies.js`, `src/scenes/PlayScene.js`, `src/scenes/HUDScene.js` (solo números)
 - **Verify:** `pnpm build` pasa; `git diff` solo numéricos; checklist Done completo.
 
@@ -217,24 +217,24 @@ Prioridades: shake `hit` (forzado) > `explosion` > resto; si se supera `FX_MAX_S
 | `RELOAD_SFX_DELAY` | 120 (desfase del clip vs último disparo) | `PlayScene.js` | T1 |
 | `HIT_SHAKE_MS` / `HIT_SHAKE_INTENSITY` | 120 / 0.004 | `PlayScene.js` | T4 |
 | `GRUNT_FRONT_DEADZONE` | 4 px | `enemies.js` | T2 |
-| `JOHN_MUZZLE_STAND` / `JOHN_MUZZLE_CROUCH` | medir en T18 (reemplaza +14/-2) | `player.js` | T18 |
-| `GRUNT_MUZZLE` | medir en T18 (reemplaza +12/0) | `enemies.js` | T18 |
+| `JOHN_MUZZLE_STAND` / `JOHN_MUZZLE_CROUCH` | medir en T5 (reemplaza +14/-2) | `player.js` | T5 |
+| `GRUNT_MUZZLE` | medir en T5 (reemplaza +12/0) | `enemies.js` | T5 |
 | `FX_DEPTH` | 10 (personajes 0, HUD en escena aparte) | `PlayScene.js` | T3 |
-| `FX_PRESETS`, `FX_MAX_PARTICLES` | ver T6 | `PlayScene.js` | T6 |
-| `MUZZLE_FLASH_MS` | 50 | `player.js` | T7 |
-| `GRUNT_TELEGRAPH_MS` / `TURRET_TELEGRAPH_MS` | 200 / 250 | `enemies.js` | T7 |
-| `ENEMY_HIT_TINT_MS` / `HIT_PAUSE_MS` / `GRUNT_STAGGER_MS` | 120 / 60 / 150 | `enemies.js` | T8 |
-| `ENEMY_BULLET_TINT` | color a definir en T10 | `enemies.js` | T10 |
-| `SFX_RATE_JITTER` / `ENEMY_SHOT_RATE` / `SFX_MIN_GAP_MS` | 0.05 / 0.85 / 40 | `PlayScene.js` | T12 |
-| `LOW_AMMO_THRESHOLD` / `HP_FLASH_MS` / `SCORE_POP_MS` | 3 / 120 / 140 | `HUDScene.js` | T13 |
-| `COYOTE_MS` / `JUMP_BUFFER_MS` / `JUMP_CUT` | 90 / 110 / 0.5 | `player.js` | T14 |
-| `CAM_LOOKAHEAD` / `CAM_LOOKAHEAD_LERP` / `CAM_FOLLOW_LERP` | 24 / a definir / 0.08 | `PlayScene.js` | T15 |
-| `FX_MAX_SPRITES` | 24 | `PlayScene.js` | T16 |
+| `FX_PRESETS`, `FX_MAX_PARTICLES` | ver T7 | `PlayScene.js` | T7 |
+| `MUZZLE_FLASH_MS` | 50 | `player.js` | T8 |
+| `GRUNT_TELEGRAPH_MS` / `TURRET_TELEGRAPH_MS` | 200 / 250 | `enemies.js` | T8 |
+| `ENEMY_HIT_TINT_MS` / `HIT_PAUSE_MS` / `GRUNT_STAGGER_MS` | 120 / 60 / 150 | `enemies.js` | T9 |
+| `ENEMY_BULLET_TINT` | color a definir en T11 | `enemies.js` | T11 |
+| `SFX_RATE_JITTER` / `ENEMY_SHOT_RATE` / `SFX_MIN_GAP_MS` | 0.05 / 0.85 / 40 | `PlayScene.js` | T13 |
+| `LOW_AMMO_THRESHOLD` / `HP_FLASH_MS` / `SCORE_POP_MS` | 3 / 120 / 140 | `HUDScene.js` | T14 |
+| `COYOTE_MS` / `JUMP_BUFFER_MS` / `JUMP_CUT` | 90 / 110 / 0.5 | `player.js` | T15 |
+| `CAM_LOOKAHEAD` / `CAM_LOOKAHEAD_LERP` / `CAM_FOLLOW_LERP` | 24 / a definir / 0.08 | `PlayScene.js` | T16 |
+| `FX_MAX_SPRITES` | 24 | `PlayScene.js` | T17 |
 
 ## Done (validación final)
 - [ ] `pnpm build` pasa sin errores ni warnings nuevos tras cada tarea
 - [ ] Manual `pnpm dev` end-to-end: cooldown John ~6/s en ráfaga (C o clic mantenido), enemigos con su cadencia, sin disparo a la espalda, cartucho 12 con recarga solo al agotar y clip distinguible, torreta rota sólida sin daño, balas desde la boca del arma (pie/agachado/grunt), balas animadas con impacto fx, daño John solo por body + anim + dust, HUD `HP/AMMO` actualiza
-- [ ] Tabla de frames de T5 completada con medidas reales; `shadow_char` y `props/` NO copiados ni cargados
+- [ ] Tabla de frames de T6 completada con medidas reales; `shadow_char` y `props/` NO copiados ni cargados
 - [ ] Emitters una sola vez; 30 impactos no suben `children.list.length`
 - [ ] Cadencias intactas: grunt 2200±50ms, torreta 2600±50ms, John ~6/s en ráfaga, recarga ~900ms
 - [ ] `snd_reload_clip` una vez por recarga; ningún sonido nuevo

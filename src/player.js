@@ -35,6 +35,11 @@ const BODY_CROUCH = { w: 18, h: 14, ox: 4, oy: 12 };
 export const JOHN_MUZZLE_STAND = { dx: 10, dy: 3 };
 export const JOHN_MUZZLE_CROUCH = { dx: 12, dy: 10 };
 
+// T8 game-feel: duración del flash de boca de John (ms). Frame 0 de
+// bullet_impact a escala 0.5 en el punto de muzzle de T5 (pie/agachado);
+// la pose de disparo la regula JOHN_SHOOT_HOLD, no esto.
+export const MUZZLE_FLASH_MS = 50;
+
 function ensureAnims(scene) {
   const anims = scene.anims;
   if (!anims.exists('john-idle')) {

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { JOHN_FIRE_DELAY, JOHN_HIT_HOLD, JOHN_MUZZLE_CROUCH, JOHN_MUZZLE_STAND, JOHN_SHOOT_HOLD, RELOAD_DELAY, createJohn, updateJohn } from '../player.js';
+import { JOHN_FIRE_DELAY, JOHN_HIT_HOLD, JOHN_MUZZLE_CROUCH, JOHN_MUZZLE_STAND, JOHN_SHOOT_HOLD, MUZZLE_FLASH_MS, RELOAD_DELAY, createJohn, updateJohn } from '../player.js';
 import {
   BULLET_RANGE,
   GRUNT_FIRE_DELAY,
@@ -524,6 +524,9 @@ export default class PlayScene extends Phaser.Scene {
     bullet.setData('spawnX', x);
     bullet.setVelocityX(dir * 340);
     bullet.body.setAllowGravity(false);
+    // T8 game-feel: flash de boca en el mismo punto de spawn de T5 (respeta
+    // pie/agachado y flipX: x ya lleva dir). Pose la regula JOHN_SHOOT_HOLD.
+    this.spawnMuzzleFlash(x, y);
     this.lastShotAt = now;
     // T3 sonidos: disparo de John (volumen SFX 0.8).
     this.sound.play('snd_rifle_shot', { volume: 0.8 });
@@ -562,6 +565,25 @@ export default class PlayScene extends Phaser.Scene {
 
   killBullet(bullet) {
     bullet.disableBody(true, true);
+  }
+
+  // T8 game-feel: flash de boca de John — frame 0 de bullet_impact a escala
+  // 0.5 sostenido MUZZLE_FLASH_MS=50 en el punto de muzzle (T5). No es anim:
+  // sprite estático autodestruido por delayedCall (reloj de Play: se congela
+  // en pausa). Si falta la textura se omite sin excepción.
+  spawnMuzzleFlash(x, y) {
+    if (!this.textures.exists('bullet-impact-anim')) {
+      return null;
+    }
+    const fx = this.add.sprite(x, y, 'bullet-impact-anim', 0);
+    fx.setScale(0.5);
+    fx.setDepth(FX_DEPTH);
+    this.time.delayedCall(MUZZLE_FLASH_MS, () => {
+      if (fx.active) {
+        fx.destroy();
+      }
+    });
+    return fx;
   }
 
   // T3 game-feel: fx de impacto en el centro del body, autodestruible con
