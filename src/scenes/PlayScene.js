@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { JOHN_FIRE_DELAY, JOHN_HIT_HOLD, JOHN_MUZZLE_CROUCH, JOHN_MUZZLE_STAND, JOHN_SHOOT_HOLD, MUZZLE_FLASH_MS, RELOAD_DELAY, createJohn, updateJohn } from '../player.js';
 import {
   BULLET_RANGE,
+  ENEMY_BULLET_TINT,
   GRUNT_FIRE_DELAY,
   TURRET_FIRE_DELAY,
   createGrunt,
@@ -493,7 +494,8 @@ export default class PlayScene extends Phaser.Scene {
     updateGrunt(this.grunt);
     updateTurret(this.turret, this.john);
     this.recycleBullets(this.bullets);
-    this.recycleBullets(this.enemyBullets);
+    // T11 game-feel: el puff de expiración enemigo hereda el rojo de la bala.
+    this.recycleBullets(this.enemyBullets, ENEMY_BULLET_TINT);
     // Caída al vacío = daño + respawn (o game over si no quedan vidas).
     // T3: durante muerte no hay doble daño (respawn por foso sigue directo).
     if (this.john.active && !this.john.getData('dead') && this.john.y > this.levelHeight + 60) {
@@ -621,11 +623,17 @@ export default class PlayScene extends Phaser.Scene {
 
   // T3 game-feel: fx de impacto en el centro del body, autodestruible con
   // once(animationcomplete → destroy). Si falta la anim se omite sin excepción.
-  spawnBulletImpact(x, y) {
+  // T11 game-feel: `scale` habilita el puff chico (0.5) del fin de rango;
+  // `tint` lo pinta con FILL (en v4 setTintFill está deprecado y no hace nada).
+  spawnBulletImpact(x, y, scale = 1, tint = null) {
     if (!this.anims.exists('bullet-impact')) {
       return;
     }
     const fx = this.add.sprite(x, y, 'bullet-impact-anim', 0);
+    fx.setScale(scale);
+    if (tint !== null) {
+      fx.setTint(tint).setTintMode(Phaser.TintModes.FILL);
+    }
     fx.setDepth(FX_DEPTH);
     fx.play('bullet-impact');
     fx.once('animationcomplete-bullet-impact', () => {
@@ -886,7 +894,7 @@ export default class PlayScene extends Phaser.Scene {
     });
   }
 
-  recycleBullets(group) {
+  recycleBullets(group, impactTint = null) {
     for (const bullet of group.getChildren()) {
       if (!bullet.active) {
         continue;
@@ -898,13 +906,18 @@ export default class PlayScene extends Phaser.Scene {
         (typeof spawnY === 'number'
           ? Math.hypot(bullet.x - spawnX, bullet.y - spawnY) > BULLET_RANGE
           : Math.abs(bullet.x - spawnX) > BULLET_RANGE);
-      if (
-        outOfRange ||
+      const outOfBounds =
         bullet.x < -30 ||
         bullet.x > this.levelWidth + 30 ||
         bullet.y < -30 ||
-        bullet.y > this.levelHeight + 90
-      ) {
+        bullet.y > this.levelHeight + 90;
+      if (outOfRange) {
+        // T11 game-feel: puff chico en la última posición al expirar por
+        // rango; enemigas con tint FILL rojo, John sin tint (amarillo).
+        // T1: no devuelve ammo.
+        this.spawnBulletImpact(bullet.x, bullet.y, 0.5, impactTint);
+      }
+      if (outOfRange || outOfBounds) {
         // T1 game-feel: expirar por rango no devuelve ammo (solo killBullet).
         this.killBullet(bullet);
       }

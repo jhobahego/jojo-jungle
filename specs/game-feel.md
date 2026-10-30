@@ -171,9 +171,9 @@ Prioridades: shake `hit` (forzado) > `explosion` > resto; si se supera `FX_MAX_S
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: explosión completa y limpia; rota sólida y visible; score +10 exacto; re-golpear no repite fx.
 
 ### T11: Legibilidad de balas y fin de vida
-- **Hacer:** Tint enemigas `ENEMY_BULLET_TINT` vs John sin tint; `rotation=Math.atan2(vy,vx)` en 8 dirs de torreta y `flipX` en John/grunt, reseteado en cada spawn (origen T5 intacto); al expirar por rango puff de `bullet-impact` escala 0.5 en última posición, sin refund. Sin cambiar velocidad, rango ni hitbox.
+- **Hacer:** Tint enemigas `ENEMY_BULLET_TINT` vs John sin tint; `rotation=Math.atan2(vy,vx)` en 8 dirs de torreta y `flipX` en John/grunt, reseteado en cada spawn (origen T5 intacto); al expirar por rango puff de `bullet-impact` escala 0.5 en última posición, con tint `FILL` `ENEMY_BULLET_TINT` en balas enemigas y sin tint (amarillo) en John, sin refund. Sin cambiar velocidad, rango ni hitbox.
 - **Archivos:** `src/scenes/PlayScene.js`, `src/enemies.js`
-- **Verify:** `pnpm build` pasa + manual `pnpm dev`: enemiga distinguible, diagonales orientadas, 30 balas sin heredar tint/rotación, expiradas con puff sin refund.
+- **Verify:** `pnpm build` pasa + manual `pnpm dev`: enemiga distinguible, diagonales orientadas, 30 balas sin heredar tint/rotación, expiradas con puff rojo en enemigas y amarillo en John, sin refund.
 
 ### T12: Impacto de balas contra el entorno
 - **Hacer:** Verificado: hoy NO hay collider/overlap balas↔plataformas, las balas atraviesan. Por eso NO se añade colisión nueva en esta tarea (cambiaría reglas): solo fx pasivo con `bullet-impact` + `emitFx('dirt')` en el punto de expiración orientado opuesto a la trayectoria (apoya a T11). Si a futuro se quiere colisión real, pedir decisión aparte. Cualquier overlap nuevo iría una sola vez en `create()`. Sin sonido nuevo.
@@ -206,7 +206,7 @@ Prioridades: shake `hit` (forzado) > `explosion` > resto; si se supera `FX_MAX_S
 - **Verify:** `pnpm build` pasa + manual `pnpm dev`: morir/reiniciar ×5 deja `AMMO:12`, `reloading=false`, 0 fx y sin warnings; pausar en recarga completa solo el resto; 10 impactos ~60fps.
 
 ### T18: Pasada final de tuning (solo constantes)
-- **Hacer:** Playtest ~10min; ajustar SOLO valores del registro (sin lógica): ningún fx tapa balas, shake no marea, anticipación legible y justa, salto no flotante, muzzle T5 alineado en ambas posturas. Completar «Valor final».
+- **Hacer:** Playtest ~10min; ajustar SOLO valores del registro (sin lógica): ningún fx tapa balas, shake no marea, anticipación legible y justa, salto no flotante, muzzle T5 alineado en ambas posturas. Completar «Valor final». Discutir si el puff grande de impacto de bala enemiga contra John pasa de amarillo a rojo (hoy sale sin tint); si se aprueba, será un cambio de lógica acotado, no solo de constante.
 - **Archivos:** constantes en `src/player.js`, `src/enemies.js`, `src/scenes/PlayScene.js`, `src/scenes/HUDScene.js` (solo números)
 - **Verify:** `pnpm build` pasa; `git diff` solo numéricos; checklist Done completo.
 

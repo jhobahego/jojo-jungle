@@ -8,6 +8,9 @@ export const GRUNT_PATROL = { minX: 430, maxX: 570 };
 export const GRUNT_FIRE_DELAY = 2200;
 export const TURRET_FIRE_DELAY = 2600;
 export const ENEMY_BULLET_SPEED = 160;
+// T11 game-feel: tinte rojo de la bala enemiga para distinguirla de la de
+// John (sin tint, amarilla). Se aplica y resetea en cada spawn.
+export const ENEMY_BULLET_TINT = 0xff4d4d;
 // Deuda combate MVP T1: alcance máximo de toda bala por distancia recorrida.
 export const BULLET_RANGE = 200;
 // Deuda combate MVP T2: gate de visión y agro para disparo y daño.
@@ -162,7 +165,7 @@ export function updateTurret(turret, john) {
   turret.setData('aimFrame', frame);
 }
 
-export function fireEnemyBullet(scene, group, x, y, dirX, dirY = 0, speed = ENEMY_BULLET_SPEED) {
+export function fireEnemyBullet(scene, group, x, y, dirX, dirY = 0, speed = ENEMY_BULLET_SPEED, rotate = false) {
   const bullet = group.get(x, y, 'enemy-bullet', 0);
   if (!bullet) {
     return;
@@ -170,11 +173,12 @@ export function fireEnemyBullet(scene, group, x, y, dirX, dirY = 0, speed = ENEM
   bullet.enableBody(true, x, y, true, true);
   // T3 game-feel: reset visual + bala animada (punto de spawn lo fija T5).
   // Un pase sincronizado al vuelo enemigo (~1.25s a 6fps); el impacto corta.
-  // Cabeza a la derecha en frame 0: flipX según signo horizontal (la
-  // rotación completa en 8 dirs de torreta la pone T10).
-  bullet.setRotation(0);
-  bullet.setFlipX(dirX < 0);
-  bullet.clearTint();
+  // T11 game-feel: la torreta orienta la bala con su vector (8 dirs, sin
+  // flipX); el grunt usa flipX según el signo horizontal. Reset por spawn.
+  bullet.setRotation(rotate ? Math.atan2(dirY, dirX) : 0);
+  bullet.setFlipX(rotate ? false : dirX < 0);
+  // T11 game-feel: bala enemiga teñida; la de John queda sin tint.
+  bullet.setTint(ENEMY_BULLET_TINT);
   bullet.setAlpha(1);
   bullet.setScale(1);
   if (scene.anims.exists('bullet-fly-enemy')) {
@@ -288,7 +292,8 @@ export function turretFire(scene, group, turret, john) {
       const speed = ENEMY_BULLET_SPEED - 10;
       const mx = turret.x + vec.x * 12;
       const my = turret.y + vec.y * 12;
-      fireEnemyBullet(scene, group, mx, my, vec.x, vec.y, speed);
+      // T11 game-feel: `true` → rotación por vector en las 8 direcciones.
+      fireEnemyBullet(scene, group, mx, my, vec.x, vec.y, speed, true);
       // T7 game-feel: boca de la torreta → ráfaga 'turret' (5) sesgada según
       // el disparo (vertical queda radial). Fx opcional, nunca rompe gameplay.
       try {
