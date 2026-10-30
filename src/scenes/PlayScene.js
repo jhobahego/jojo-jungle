@@ -225,6 +225,19 @@ export default class PlayScene extends Phaser.Scene {
       frameWidth: 2,
       frameHeight: 2,
     });
+    // T10 game-feel: explosión de torreta rota (frames medidos en T6).
+    // Keys 'explosion-*-anim' distintas a los gates 'fx-explosion-*' de
+    // PreloadScene para evitar 'Texture key already in use'.
+    // - explosion_red 260x22 → 10f 26x22 (fronteras limpias).
+    // - explosion_smoke 864x72 → 12f 72x72 (f12 vacío por disipación total).
+    this.load.spritesheet('explosion-red-anim', 'assets/fx/explosion_red.png', {
+      frameWidth: 26,
+      frameHeight: 22,
+    });
+    this.load.spritesheet('explosion-smoke-anim', 'assets/fx/explosion_smoke.png', {
+      frameWidth: 72,
+      frameHeight: 72,
+    });
   }
 
   create() {
@@ -316,6 +329,26 @@ export default class PlayScene extends Phaser.Scene {
         key: 'jump-dust',
         frames: this.anims.generateFrameNumbers('jump-dust-anim', { start: 0, end: 5 }),
         frameRate: 12,
+        repeat: 0,
+      });
+    }
+    // T10 game-feel: explosion-red/smoke (repeat 0, autodestruibles vía
+    // once(animationcomplete → destroy) en spawnExplosionRed/Smoke).
+    // Presupuesto ≤600ms: blanco 80ms + roja 10f a 20fps (500ms) = 580ms;
+    // el humo 12f a 24fps (500ms) corre encima en paralelo, no suma.
+    if (!this.anims.exists('explosion-red')) {
+      this.anims.create({
+        key: 'explosion-red',
+        frames: this.anims.generateFrameNumbers('explosion-red-anim', { start: 0, end: 9 }),
+        frameRate: 20,
+        repeat: 0,
+      });
+    }
+    if (!this.anims.exists('explosion-smoke')) {
+      this.anims.create({
+        key: 'explosion-smoke',
+        frames: this.anims.generateFrameNumbers('explosion-smoke-anim', { start: 0, end: 11 }),
+        frameRate: 24,
         repeat: 0,
       });
     }
@@ -598,6 +631,36 @@ export default class PlayScene extends Phaser.Scene {
     fx.once('animationcomplete-bullet-impact', () => {
       fx.destroy();
     });
+  }
+
+  // T10 game-feel: explosión de torreta rota, autodestruible con
+  // once(animationcomplete → destroy). Guarda anims.exists: si falta la
+  // anim se omite sin excepción. La roja va centrada en la torreta; el humo
+  // se crea después (encima por orden de creación, mismo FX_DEPTH).
+  spawnExplosionRed(x, y) {
+    if (!this.anims.exists('explosion-red')) {
+      return null;
+    }
+    const fx = this.add.sprite(x, y, 'explosion-red-anim', 0);
+    fx.setDepth(FX_DEPTH);
+    fx.play('explosion-red');
+    fx.once('animationcomplete-explosion-red', () => {
+      fx.destroy();
+    });
+    return fx;
+  }
+
+  spawnExplosionSmoke(x, y) {
+    if (!this.anims.exists('explosion-smoke')) {
+      return null;
+    }
+    const fx = this.add.sprite(x, y, 'explosion-smoke-anim', 0);
+    fx.setDepth(FX_DEPTH);
+    fx.play('explosion-smoke');
+    fx.once('animationcomplete-explosion-smoke', () => {
+      fx.destroy();
+    });
+    return fx;
   }
 
   // T4 game-feel: dust a pies, autodestruible (una instancia por llamada;

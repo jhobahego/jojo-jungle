@@ -44,6 +44,12 @@ export const TURRET_TELEGRAPH_TINT = 0xb6b6d7;
 export const ENEMY_HIT_TINT_MS = 120;
 export const HIT_PAUSE_MS = 60;
 export const GRUNT_STAGGER_MS = 150;
+// T10 game-feel: rotura de torreta (secuencia ≤600ms a HP 0).
+// Blanco 80ms + hit-pause, luego explosion_red + turret-broke + humo encima.
+// Shake de explosión 150ms/0.003 (directo; T16 lo centraliza en shakeCam).
+export const TURRET_BREAK_FLASH_MS = 80;
+export const TURRET_EXPLOSION_SHAKE_MS = 150;
+export const TURRET_EXPLOSION_SHAKE_INTENSITY = 0.003;
 
 export function isOnCameraPlusMargin(scene, x, margin = CAM_MARGIN) {
   const view = scene.cameras.main.worldView;
@@ -443,6 +449,8 @@ export function damageTurret(scene, turret) {
   const hp = turret.getData('hp') - 1;
   turret.setData('hp', hp);
   if (hp <= 0) {
+    // T10 game-feel: dead=true ANTES de fx (re-golpes retornan arriba por
+    // `dead`: sin score/daño/fx extra).
     turret.setData('dead', true);
     const timer = turret.getData('fireTimer');
     if (timer) {
@@ -460,24 +468,61 @@ export function damageTurret(scene, turret) {
     clearHitFeedback(turret);
     // T2 game-feel: rota queda sólida y visible — body ON (staticSprite, sin
     // mover el cuerpo ni refreshBody), 'turret-broke' sin destroy.
-    // Score +10 solo al romper (re-golpes retornan arriba por `dead`).
+    // Score +10 solo al romper (un solo +10; re-golpes retornan arriba).
     if (turret.body) {
       turret.body.enable = true;
     }
     scene.registry.set('score', scene.registry.get('score') + 10);
-    turret.play('turret-broke');
-    // T7 game-feel: HP 0 → ráfaga 'explosion' (14) en el centro de la
-    // torreta (el count vive en FX_PRESETS de PlayScene). Si la escena no
-    // expone emitFx se omite sin excepción; nunca bloquea score/daño.
-    try {
-      if (typeof scene.emitFx === 'function') {
-        scene.emitFx('explosion', turret.x, turret.y, 0);
-      }
-    } catch {
-      // Fx opcional: un fallo de partículas nunca rompe el gameplay.
+    // T10 game-feel: secuencia ≤600ms — (1) blanco 80ms + hit-pause del
+    // sprite (anims.pause/resume, nunca hit-stop global), (2) explosion_red
+    // centrada + emitFx('explosion') + snd_explosion_ground + shake
+    // 150ms/0.003 e inicia 'turret-broke', (3) explosion_smoke encima
+    // autodestruible. Todo diferido usa el reloj de Play (se congela en
+    // pausa). Fx opcionales: si faltan se omiten sin excepción.
+    turret.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
+    if (turret.anims) {
+      turret.anims.pause();
     }
-    // T4 sonidos: muerte de torreta (volumen SFX 0.8; el golpe no mortal sigue mudo).
-    scene.sound.play('snd_explosion_ground', { volume: 0.8 });
+    scene.time.delayedCall(TURRET_BREAK_FLASH_MS, () => {
+      if (!turret.active) {
+        return;
+      }
+      if (turret.anims) {
+        turret.anims.resume();
+      }
+      turret.clearTint();
+      turret.play('turret-broke');
+      // T7 game-feel: HP 0 → ráfaga 'explosion' (14) en el centro de la
+      // torreta (el count vive en FX_PRESETS de PlayScene). Si la escena no
+      // expone emitFx se omite sin excepción; nunca bloquea score/daño.
+      try {
+        if (typeof scene.emitFx === 'function') {
+          scene.emitFx('explosion', turret.x, turret.y, 0);
+        }
+      } catch {
+        // Fx opcional: un fallo de partículas nunca rompe el gameplay.
+      }
+      try {
+        if (typeof scene.spawnExplosionRed === 'function') {
+          scene.spawnExplosionRed(turret.x, turret.y);
+        }
+      } catch {
+        // Fx opcional.
+      }
+      // T4 sonidos: muerte de torreta (volumen SFX 0.8; el golpe no mortal sigue mudo).
+      // Suena con la explosión (paso 2), no con el blanco inicial.
+      scene.sound.play('snd_explosion_ground', { volume: 0.8 });
+      // Shake directo (T16 lo centraliza en shakeCam); forzado no, la
+      // explosión no compite con hit (matriz: hit > explosion).
+      scene.cameras.main.shake(TURRET_EXPLOSION_SHAKE_MS, TURRET_EXPLOSION_SHAKE_INTENSITY);
+      try {
+        if (typeof scene.spawnExplosionSmoke === 'function') {
+          scene.spawnExplosionSmoke(turret.x, turret.y);
+        }
+      } catch {
+        // Fx opcional.
+      }
+    });
     return true;
   }
   // T9 game-feel: torreta viva golpeada — tint blanco 120ms (reinicia timer) +
