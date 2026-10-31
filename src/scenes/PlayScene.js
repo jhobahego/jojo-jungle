@@ -916,6 +916,12 @@ export default class PlayScene extends Phaser.Scene {
         // rango; enemigas con tint FILL rojo, John sin tint (amarillo).
         // T1: no devuelve ammo.
         this.spawnBulletImpact(bullet.x, bullet.y, 0.5, impactTint);
+        // T12 game-feel: impacto pasivo contra el entorno — polvo en el
+        // punto de expiración, en cono opuesto a la trayectoria (bala a la
+        // derecha → polvo hacia atrás). Sin collider nuevo: las balas
+        // siguen atravesando plataformas para no cambiar las reglas.
+        const dirX = Math.sign(bullet.body?.velocity?.x ?? 0);
+        this.emitFx('dirt', bullet.x, bullet.y, -dirX);
       }
       if (outOfRange || outOfBounds) {
         // T1 game-feel: expirar por rango no devuelve ammo (solo killBullet).
